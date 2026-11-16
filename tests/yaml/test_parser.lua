@@ -244,6 +244,34 @@ T["should parse inline mappings"] = function()
   eq({ foo = { bar = 1, baz = "Baz" } }, result)
 end
 
+T["should parse collections containing quoted wikilinks"] = function()
+  local result = parser:parse(table.concat({
+    'links: ["[[B]]", "[[C|Alias]]", plain]',
+    'object: {link: "[[B]]"}',
+    "bare: [[B]]",
+    'quoted: "[[B]]"',
+    'prose: "see [[B]] here"',
+  }, "\n"))
+  eq({ "[[B]]", "[[C|Alias]]", "plain" }, result.links)
+  eq({ link = "[[B]]" }, result.object)
+  eq("[[B]]", result.bare)
+  eq("[[B]]", result.quoted)
+  eq("see [[B]] here", result.prose)
+end
+
+T["should preserve empty mapping and sequence identity"] = function()
+  local result = parser:parse "empty_object: {}\nempty_list: []\nnested: [{}, []]"
+
+  eq(false, vim.islist(result.empty_object))
+  eq("{}", vim.json.encode(result.empty_object))
+  eq(true, vim.islist(result.empty_list))
+  eq("[]", vim.json.encode(result.empty_list))
+  eq(false, vim.islist(result.nested[1]))
+  eq(true, vim.islist(result.nested[2]))
+  eq(false, vim.islist(parser:parse "{}"))
+  eq(true, vim.islist(parser:parse "[]"))
+end
+
 T["should parse array mapping continuations after blank lines"] = function()
   local result = parser:parse(table.concat({
     "items:",

@@ -87,6 +87,22 @@ T["parse YYYY"] = function()
   parse_eq("1999-12-31", "YYYY-MM-DD", { year = 1999, month = 12, day = 31, hour = 0, min = 0, sec = 0 })
 end
 
+T["lets the runtime infer daylight-saving time"] = function()
+  local original_time = os.time
+  local observed_isdst
+  rawset(os, "time", function(fields)
+    observed_isdst = fields.isdst
+    return original_time(fields)
+  end)
+  local ok, result = pcall(moment.parse, "2024-03-15", "YYYY-MM-DD")
+  rawset(os, "time", original_time)
+  if not ok then
+    error(result)
+  end
+  MiniTest.expect.equality(observed_isdst, nil)
+  MiniTest.expect.equality(result.hour, 0)
+end
+
 T["parse YY current century"] = function()
   parse_eq("24-03-15", "YY-MM-DD", { year = 2024, month = 3, day = 15, hour = 0, min = 0, sec = 0 })
 end

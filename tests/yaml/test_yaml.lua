@@ -53,8 +53,12 @@ T["dump"]["should dump tables with array values"] = function()
   eq(yaml.dumps { a = { "foo" }, b = { "bar" } }, "a:\n  - foo\nb:\n  - bar")
 end
 
-T["dump"]["should dump tables with empty array"] = function()
+T["dump"]["should dump empty collections according to their identity"] = function()
+  eq(yaml.dumps {}, "[]")
+  eq(yaml.dumps(vim.empty_dict()), "{}")
   eq(yaml.dumps { a = {} }, "a: []")
+  eq(yaml.dumps { a = vim.empty_dict() }, "a: {}")
+  eq(yaml.dumps { {}, vim.empty_dict() }, "- []\n- {}")
 end
 
 T["dump"]["should quote empty strings or strings with just whitespace"] = function()

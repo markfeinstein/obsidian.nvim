@@ -62,6 +62,10 @@ local YamlType = {
 
 m.YamlType = YamlType
 
+local function new_mapping()
+  return vim.empty_dict()
+end
+
 ---@class vim.NIL
 
 ---Create a new Parser.
@@ -319,7 +323,7 @@ Parser._try_parse_field = function(self, lines, i, text, col)
 
   if value ~= nil then
     -- This is a mapping, e.g. `foo: 1`.
-    local out = {}
+    local out = new_mapping()
     value = self:_parse_inline_value(i, value, value_col)
     local element = self._elements[#self._elements]
     local j = i + 1
@@ -364,7 +368,7 @@ Parser._try_parse_field = function(self, lines, i, text, col)
     self._path[#self._path] = nil
     return true, j, out
   else
-    local out = {}
+    local out = new_mapping()
     local j = i + 1
     while lines[j] and lines[j]:is_empty() do
       j = j + 1
@@ -428,7 +432,7 @@ Parser._try_parse_block_string = function(self, lines, i, text, col)
         break
       end
     end
-    local out = {}
+    local out = new_mapping()
     out[block_key] = table.concat(block_lines, "\n")
     self._path[#self._path + 1] = block_key
     local indicator_col = col + assert(text:find("|", 1, true)) - 1
@@ -534,7 +538,7 @@ end
 ---@param lines obsidian.yaml.Line[]
 ---@return integer, table
 Parser._parse_mapping = function(self, i, lines)
-  local out = {}
+  local out = new_mapping()
   local first_line = lines[i]
   ---@cast first_line -nil
   local item_indent = first_line.indent
@@ -576,7 +580,9 @@ end
 Parser._parse_inline_value = function(self, i, text, col)
   col = col + #text - #util.lstrip_whitespace(text)
   text = vim.trim(text)
-  if not text:match "%[%[.-%]%]" and not yaml_util.has_enclosing_chars(text) then
+  -- Preserve a bare wikilink as a scalar, not a flow collection. A link
+  -- inside a quoted collection item must not turn the entire list into text.
+  if not text:match "^!?%[%[[^%[%]]+%]%]$" and not yaml_util.has_enclosing_chars(text) then
     for _, entry in ipairs {
       { self._parse_inline_array, YamlType.Array },
       { self._parse_inline_mapping, YamlType.Mapping },
@@ -674,7 +680,7 @@ Parser._parse_inline_mapping = function(self, i, text, col)
     return false, self:_error_msg("invalid inline mapping", i, text), nil
   end
 
-  local out = {}
+  local out = new_mapping()
   str = util.lstrip_whitespace(str)
   while string.len(str) > 0 do
     -- Parse the key.

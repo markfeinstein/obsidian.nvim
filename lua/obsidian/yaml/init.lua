@@ -142,7 +142,9 @@ local function dumps(x, indent, order)
   if type(x) == "table" then
     local out = {}
 
-    if vim.islist(x) then
+    if vim.tbl_isempty(x) then
+      return { indent_str .. (vim.islist(x) and "[]" or "{}") }
+    elseif vim.islist(x) then
       for _, v in ipairs(x) do
         local item_lines = dumps(v, indent + 2)
         if #item_lines == 0 then
@@ -185,7 +187,8 @@ local function dumps(x, indent, order)
         elseif type(v) == "boolean" or type(v) == "number" then
           table.insert(out, indent_str .. tostring(k) .. ": " .. tostring(v))
         elseif type(v) == "table" and vim.tbl_isempty(v) then
-          table.insert(out, indent_str .. tostring(k) .. ": []")
+          local empty_value = vim.islist(v) and "[]" or "{}"
+          table.insert(out, indent_str .. tostring(k) .. ": " .. empty_value)
         else
           local item_lines = dumps(v, indent + 2)
           table.insert(out, indent_str .. tostring(k) .. ":")

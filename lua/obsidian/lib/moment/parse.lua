@@ -517,7 +517,6 @@ local DEFAULTS = {
   hour = 0,
   min = 0,
   sec = 0,
-  isdst = false,
 }
 
 ---@param input string
