@@ -1,0 +1,8 @@
+{
+  "name": "obsidian-nvim-bases-runtime",
+  "private": true,
+  "description": "Pinned local evaluator runtime for obsidian.nvim Bases support",
+  "dependencies": {
+    "obsidian-bases-expression": "0.2.0"
+  }
+}

@@ -9,6 +9,4 @@ _runtime
 deps/
 .repro/
 node_modules/
-package-lock.json
-package.json
 .agents/

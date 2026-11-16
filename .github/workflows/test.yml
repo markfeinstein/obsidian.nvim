@@ -3,9 +3,25 @@ name: Tests
 on:
   push:
     branches: [main]
-    paths: [ 'lua/**', 'tests/**' ]
+    paths:
+      - '.github/workflows/test.yml'
+      - 'Makefile'
+      - 'lua/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'runtime/**'
+      - 'scripts/minimal_init.lua'
+      - 'tests/**'
   pull_request:
-    paths: [ 'lua/**', 'tests/**' ]
+    paths:
+      - '.github/workflows/test.yml'
+      - 'Makefile'
+      - 'lua/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'runtime/**'
+      - 'scripts/minimal_init.lua'
+      - 'tests/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -29,6 +45,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install evaluator dependencies
+        run: npm ci --ignore-scripts
+
       # TODO: can be removed once we have fallback native search backend
       - name: Install ripgrep
         run: |
