@@ -37,7 +37,7 @@ Neovim 0.11 or later is required. Install [ripgrep](https://github.com/BurntSush
 
 Use the same vault path in both Obsidian and Neovim. The app's [Importer](https://help.obsidian.md/import) can bring notes from other tools into your vault, and the [Web Clipper](https://obsidian.md/clipper) can save pages from your browser. Both work well alongside obsidian.nvim.
 
-The Obsidian app remains the better choice for Bases and other graphical extensions. Graph view and Canvas are especially valuable; we are working on a browser interface managed by obsidian.nvim to bring those workflows to this setup. We are also working on a Web Clipper integration that can send clipped pages to your vault without requiring the Obsidian app.
+The Obsidian app remains the better choice for fully graphical Bases, Graph view, Canvas, and other visual extensions. obsidian.nvim also provides an experimental nightly-first local [[Bases]] workspace for a documented subset of `.base` queries and views; it does not require the desktop app, but it is not yet a full Bases replacement. We are also working on a Web Clipper integration that can send clipped pages to your vault without requiring the Obsidian app.
 
 ## If you are coming from Neovim
 

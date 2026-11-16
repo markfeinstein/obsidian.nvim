@@ -59,6 +59,8 @@ Vault-wide block candidates are indexed in memory on first use and updated per n
 
 📎 **Embeds:** Render Markdown notes, headings, and blocks inline, with paged whole-note previews. See [Embeds](https://obsidian-nvim.github.io/obsidian.nvim/Embeds).
 
+🗃️ **Bases (experimental):** Open local, native Neovim workspaces for `.base` definitions without launching the Obsidian desktop app. See [Bases](https://obsidian-nvim.github.io/obsidian.nvim/Bases) for the supported vertical slice and required evaluator setup.
+
 📈 **Status:** See note status in footer like obsidian app.
 
 🔄 **Sync:** [Sync](https://obsidian-nvim.github.io/obsidian.nvim/Sync) support for [Obsidian Sync](https://obsidian.md/help/sync).
@@ -91,6 +93,7 @@ There's one entry point user command for this plugin: `Obsidian`
 
 #### Top level commands
 
+- `:Obsidian bases [FILE.base[#VIEW]]` - open an experimental local Bases workspace; with no argument, use a linked or fenced Base under the cursor when available
 - `:Obsidian check` - check for common issues in your vault and plugin setup
 - `:Obsidian dailies [OFFSET ...]` - open a picker list of daily notes
   - `:Obsidian dailies -2 1` to list daily notes from 2 days ago until tomorrow
@@ -162,9 +165,25 @@ There's one entry point user command for this plugin: `Obsidian`
   - **MacOS** users need [`pngpaste`](https://github.com/jcsalterego/pngpaste) (`brew install pngpaste`) for `:Obsidian paste_img`. ImageMagick is optional and corrects macOS paste gamma when installed (`brew install imagemagick`).
   - **Linux** users need `xclip` (X11) or `wl-clipboard` (Wayland) for `:Obsidian paste_img`.
 
+### Bases evaluator (experimental)
+
+`:Obsidian bases` requires Node.js and the evaluator version pinned by this repository. From the installed plugin directory, install it without lifecycle scripts:
+
+```sh
+npm install --ignore-scripts
+```
+
+For a clean checkout or reproducible CI/plugin-manager build, use the lockfile instead:
+
+```sh
+npm ci --ignore-scripts
+```
+
+The rest of obsidian.nvim does not require this package. Without it, a Bases workspace stays open and reports `backend_unavailable` rather than falling back to the Obsidian desktop app. See [Bases](https://obsidian-nvim.github.io/obsidian.nvim/Bases) for current support and limitations.
+
 ### Plugin dependencies
 
-There's no required dependency, but there are a number of optional dependencies that enhance the obsidian.nvim experience.
+There's no required dependency for the core plugin, but there are a number of optional dependencies that enhance the obsidian.nvim experience.
 
 - **Pickers:**
   - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim)

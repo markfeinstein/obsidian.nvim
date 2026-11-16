@@ -9,18 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Experimental nightly-first, local-first Bases workspaces through `:Obsidian bases [file.base[#View]]`, including linked and fenced Base discovery, local filter/formula evaluation, table/list/Kanban/cards rendering, guarded unsaved property edits, and optional explicit CLI comparison. The evaluator requires Node.js and `npm install --ignore-scripts` (or `npm ci --ignore-scripts` for clean installs) in the plugin directory. See [Bases](docs/Bases.md).
 - Follow `obsidian://` Markdown links and autolinks inside Neovim through link navigation. Supports `open`, `new`, `daily`, `unique`, `search`, and `choose-vault`, including heading/block targets, section content insertion, and tab/split opening. File-modifying links require confirmation by default; URI targets stay inside configured workspaces. See [Navigation](docs/Navigation.md#obsidian-uri-links).
 - Shared note APIs for whole-body and descendant-section insertion, explicit spacing modes, case-insensitive heading selection, exact-path creation, and noninteractive filename validation. URI actions reuse these APIs rather than maintaining a separate editing implementation.
 - JXL/JPEG XL Support.
 
 ### Fixed
 
+- Bases scalar edits reject non-finite numbers and verify serialized values before mutation, preventing numeric overflow or precision loss from silently changing note properties.
+- Bases datetime edits accept UTC/offset timestamps and fractional seconds without losing timezone or precision, and reject malformed time components.
+- Bases refresh after note, definition, or property-type buffer edits are discarded by unloading, deleting, wiping, or reloading the source buffer.
+- Bases note-property `tags` comes only from frontmatter; body tags remain available through `file.tags` without inventing editable note properties.
+- Declared date/datetime types apply consistently to note properties, current/foreign file properties, and pinned `this.file` contexts, preserving empty dates and exact-name type precedence.
+- Bases outgoing links and backlinks resolve exact vault/source-relative paths before basename or directory-suffix aliases; explicit missing paths cannot resolve to unrelated files.
+- Bases evaluation keeps ambiguous basename and directory-suffix links unresolved instead of selecting an arbitrary file; exact file paths retain precedence.
+- Bases property edits reject non-mapping, mixed-root, and flow-root frontmatter before preparing a patch, while still allowing empty block frontmatter to be populated.
+- Linked Bases resolve unique shortest-path targets across vault folders with ambiguity, ignore-rule, realpath-boundary, and lookup-deadline safeguards. The command retains embedded resolution diagnostics instead of reporting a missing target.
+- Bases recognize wikilink-valued text and list properties as evaluator links, including file and pinned-context properties, while preserving the original values used for editing. YAML flow collections containing quoted wikilinks remain collections rather than being misparsed as text.
+- Bases expression errors remain unsupported when nested in boolean operators, conditionals, or list predicates; unused short-circuited branches remain unevaluated.
+- Bases sorts treat missing properties and explicit YAML nulls as equal, preventing descending-sort failures and preserving secondary sort keys.
+- Fenced Bases opened through `:Obsidian bases` retain their containing buffer when the workspace opens or refreshes from another buffer.
+- Bases directory-level watch events invalidate the shared file index so moved, imported, and deleted subtrees are reconciled on automatic refresh.
+- Explicit Bases refresh rescans the pinned vault to recover missed file-watch events while automatic refreshes keep using incremental index updates.
+- Bases evaluation resolves declared property types case-insensitively, with exact-name precedence matching the editor.
+- Empty declared date and datetime properties remain null during local evaluation instead of becoming Unix-epoch dates.
+- Bases backlink dependencies include spaced member access and bracket/computed property access, avoiding silently empty results for equivalent expressions.
+- Bases outgoing links and embeds carry source-relative resolved paths for `file.hasLink()`, `asFile()`, and pinned note contexts.
+- Bases backlinks resolve ordinary relative Markdown links from their containing note before vault-wide lookup, without changing wiki-link ambiguity handling.
+- Bases filters and formulas preserve dotted filenames in candidate files and pinned contexts instead of stripping an extra suffix.
+- Bases runtime filter and formula errors produce unsupported results, including errors nested inside structured filters, rather than successful empty or broadened results.
+- Bases flow-list edits quote collection punctuation and verify that serialized values round-trip before modifying a note.
+- All Bases property mutation paths reject invalid or unclosed frontmatter, including edits to existing scalar properties.
+- Bases property edits reject non-note and outside-vault targets, revalidate prompt and property-type snapshots, and preserve CRLF type metadata writes.
+- Bases workspaces remain pinned to their originating real vault and reject escaping paths and symlink targets for definitions, indexes, images, edits, metadata, and CLI comparison.
+- Bases evaluation preserves empty mapping/list identity, resolves extensionless backlinks across supported note extensions, and bounds cancellable worker requests with timeout recovery.
+- Clean test checkouts install the pinned Bases evaluator before running the suite.
+- Bases card thumbnails use image-row display columns and release image IDs and cached bytes when the workspace is hidden or closed.
+- Bases render multiline property values and control characters as single-line text without changing their underlying values or breaking the workspace buffer.
+- Modified note buffers now obey the same vault-internal and configured ignore exclusions as the Bases file index.
+- Guarded Bases note edits refuse stale unmodified buffers instead of risking overwriting newer disk content on a later save.
+- Bases descending sorts and groups now use a strict ordering; false formula values remain visible and group separately from missing values.
 - Write note content without Windows text-mode newline conversion, preventing stray carriage returns in open buffers after saving.
 - Preserve percent-encoded query values when following URI links instead of decoding query delimiters before dispatch.
 - LSP rename (`vim.lsp.buf.rename()`) renames block ids, headings (ATX and setext, with the links naming them), footnotes, tags (inline and in the frontmatter, with their subtags; renaming onto an existing tag merges them) and attachments (the file and every reference) under the cursor.
 
 ### Changed
 
+- Clarified and regression-tested Bases non-date type semantics: metadata selects editors but does not coerce query values away from their stored YAML types; expressions can convert values explicitly.
+- Bases grouped tables measure shared column widths once per render rather than rescanning every result for every group.
 - LSP rename on plain text and other elements no longer renames the current note; `prepareRename` answers "Nothing to rename". Use `:Obsidian rename` to rename the note of the current buffer.
 - `:Obsidian rename [NEWNAME]` renames the note of the current buffer directly, wherever the cursor is, instead of going through LSP.
 

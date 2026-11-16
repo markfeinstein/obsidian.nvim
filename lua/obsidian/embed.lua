@@ -1,3 +1,8 @@
+local base_embed = require "obsidian.bases.embed"
+local BufferDocument = require "obsidian.document"
+local Document = require "obsidian.parse.document"
+local embeds = require "obsidian.parse.embeds"
+local Range = require "obsidian.range"
 local search = require "obsidian.search"
 local ts = require "obsidian.ts"
 local watchfiles = require "obsidian.lsp.watchfiles"
@@ -22,11 +27,6 @@ local MAX_NOTE_LINES = 2147483647
 ---@field dependencies table<string, boolean>
 ---@field source_path string|nil
 ---@field previews table<string, obsidian.embed.Preview>
-
----@class obsidian.embed.Match
----@field col integer 0-indexed
----@field end_col integer 0-indexed, exclusive
----@field target string
 
 ---@class obsidian.embed.Preview
 ---@field offset integer
@@ -117,59 +117,8 @@ local function render_note(context)
   return virt_lines
 end
 
----@param body string
----@return string
-local function clean_wiki_target(body)
-  return vim.trim(body:match "^([^|]+)" or body)
-end
-
----@param body string
----@return string
-local function clean_markdown_target(body)
-  body = vim.trim(body)
-  body = body:match "^<(.+)>$" or body
-  body = body:match "^(%S+)%s+['\"].-['\"]$" or body
-  return vim.uri_decode(body:gsub("\\ ", " "))
-end
-
----@param line string
----@return obsidian.embed.Match[]
-local function find_embeds(line)
-  local matches = {}
-  for col, body, end_pos in line:gmatch "()!%[%[([^%]]+)%]%]()" do
-    matches[#matches + 1] = {
-      col = col - 1,
-      end_col = end_pos - 1,
-      target = clean_wiki_target(body),
-    }
-  end
-  for col, body, end_pos in line:gmatch "()!%[[^%]]*%]%(([^%)]+)%)()" do
-    matches[#matches + 1] = {
-      col = col - 1,
-      end_col = end_pos - 1,
-      target = clean_markdown_target(body),
-    }
-  end
-  table.sort(matches, function(left, right)
-    return left.col < right.col
-  end)
-  return matches
-end
-
----@param target string
----@return string
----@return string|nil
-local function target_parts(target)
-  local path, fragment = target:match "^(.-)#(.*)$"
-  path = (path or target):gsub("%?.*$", "")
-  if fragment then
-    fragment = fragment:gsub("%?.*$", "")
-  end
-  return path, fragment ~= "" and fragment or nil
-end
-
 ---@param row integer 0-indexed
----@param match obsidian.embed.Match
+---@param match obsidian.parse.embeds.Match
 ---@return string
 local function preview_key(row, match)
   return table.concat({ row, match.col, match.end_col, match.target }, ":")
@@ -187,11 +136,11 @@ local function slice(lines, offset, limit)
   return result
 end
 
----@param match obsidian.embed.Match
+---@param match obsidian.parse.embeds.Match
 ---@param buf integer
 ---@return obsidian.embed.Context|nil
 local function resolve_context(match, buf)
-  local target, fragment = target_parts(match.target)
+  local target, fragment = embeds.target_parts(match.target)
   if not is_markdown(target) then
     return nil
   end
@@ -347,24 +296,39 @@ M.refresh = function(buf)
   state.previews = {}
   vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
 
-  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local document = BufferDocument.get(buf)
+  local lines = document.lines
   for line_num, line in ipairs(lines) do
     local rendered = {}
-    for _, match in ipairs(find_embeds(line)) do
-      local context = resolve_context(match, buf)
-      if context then
-        if context.path then
-          state.dependencies[normalize(context.path)] = true
-        end
-        local ok, virt_lines = pcall(render_note, context)
-        if ok and virt_lines then
-          local key = preview_key(line_num - 1, match)
-          local previous = previous_previews[key]
-          local limit = context.range and #virt_lines or MAX_PREVIEW_LINES
-          local max_offset = math.max(0, #virt_lines - limit)
-          local offset = math.min(previous and previous.offset or 0, max_offset)
-          state.previews[key] = { offset = offset, total = #virt_lines, limit = limit }
-          vim.list_extend(rendered, slice(virt_lines, offset, limit))
+    for _, match in ipairs(embeds.find(line)) do
+      local row = line_num - 1
+      local source_range = Range.new(row, match.col, row, match.end_col)
+      if not document:intersects(source_range, Document.BODY_EXCLUSIONS) then
+        local base_preview = base_embed.preview(match.target, buf, row, document, match)
+        if base_preview then
+          if base_preview.path then
+            state.dependencies[normalize(base_preview.path)] = true
+          end
+          local key = preview_key(row, match)
+          state.previews[key] = { offset = 0, total = 1, limit = 1 }
+          rendered[#rendered + 1] = with_separator { { base_preview.text, "Comment" } }
+        else
+          local context = resolve_context(match, buf)
+          if context then
+            if context.path then
+              state.dependencies[normalize(context.path)] = true
+            end
+            local ok, virt_lines = pcall(render_note, context)
+            if ok and virt_lines then
+              local key = preview_key(row, match)
+              local previous = previous_previews[key]
+              local limit = context.range and #virt_lines or MAX_PREVIEW_LINES
+              local max_offset = math.max(0, #virt_lines - limit)
+              local offset = math.min(previous and previous.offset or 0, max_offset)
+              state.previews[key] = { offset = offset, total = #virt_lines, limit = limit }
+              vim.list_extend(rendered, slice(virt_lines, offset, limit))
+            end
+          end
         end
       end
     end
@@ -396,7 +360,7 @@ M.scroll_under_cursor = function(delta)
     return nil
   end
 
-  for _, match in ipairs(find_embeds(line)) do
+  for _, match in ipairs(embeds.find(line)) do
     if match.col <= col and col < match.end_col then
       local key = preview_key(row, match)
       local preview = state.previews[key]

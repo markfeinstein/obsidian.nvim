@@ -300,6 +300,13 @@ M.register("unique_note", { nargs = "?" })
 
 M.register("bookmarks", { nargs = 0 })
 
+M.register("bases", {
+  nargs = "?",
+  complete = function(arg)
+    return require("obsidian.bases").complete(arg)
+  end,
+})
+
 ---------------------
 ---- note action ----
 ---------------------

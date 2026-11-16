@@ -60,7 +60,7 @@ The second form targets the current note. Block previews are not truncated. A mi
 
 ## Canvas and Bases
 
-Inline Canvas and Bases rendering is not feasible with the current extmark preview model and neovim TUI in general, hence is currently not planned.
+Inline Canvas rendering and full inline Bases views are not planned for the current extmark preview model and Neovim TUI. Linked and fenced Base definitions can instead show a read-only action hint; `:Obsidian bases` opens the experimental native workspace described in [[Bases]].
 
 ## See also
 

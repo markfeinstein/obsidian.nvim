@@ -42,6 +42,10 @@ vim.api.nvim_create_autocmd("CmdlineChanged", {
 })
 ```
 
+## Bases workspace
+
+`:Obsidian bases [file.base[#View]]` opens an experimental local Bases workspace. With no argument, the command opens the linked or fenced Base under the cursor when available. The local evaluator requires Node.js plus `npm install --ignore-scripts` in an existing plugin checkout, or `npm ci --ignore-scripts` for a clean, lockfile-based install. See [[Bases]] for supported syntax, safeguards, and current limitations.
+
 ## See also
 
-[[Actions]] · [[Keymaps]] · [[Completion]]
+[[Actions]] · [[Bases]] · [[Keymaps]] · [[Completion]]
