@@ -1,5 +1,17 @@
 local M = {}
 
+---Prefer filesystem creation time. Libuv uses a zero timestamp when birth time
+---is unavailable; only then fall back to inode change time for compatibility.
+---@param stat uv.fs_stat.result
+---@return { sec: integer, nsec: integer }|nil
+function M.creation_time(stat)
+  local birthtime = stat.birthtime
+  if birthtime and (birthtime.sec ~= 0 or birthtime.nsec ~= 0) then
+    return birthtime
+  end
+  return stat.ctime
+end
+
 local function split_path(path)
   local parts = {}
   for part in path:gmatch "[^/]+" do
@@ -58,6 +70,54 @@ function M.is_subpath(path, root)
   path = vim.fs.normalize(path):gsub("/+$", "")
   root = vim.fs.normalize(root):gsub("/+$", "")
   return path == root or vim.startswith(path, root .. "/")
+end
+
+local function absolute(path)
+  return vim.fs.normalize(vim.fs.abspath(path))
+end
+
+---Check a path against the filesystem-resolved boundary of a root.
+---When `allow_missing` is set, a missing leaf is accepted only when its nearest
+---existing ancestor resolves inside the root. Dangling symlinks remain rejected.
+---@param path string
+---@param root string
+---@param opts { allow_missing: boolean? }|nil
+---@return boolean inside
+---@return string|nil resolved_path
+---@return string|nil resolved_root
+function M.is_real_subpath(path, root, opts)
+  opts = opts or {}
+  path, root = absolute(path), absolute(root)
+  local resolved_root = vim.uv.fs_realpath(root)
+  if not resolved_root then
+    return false, nil, nil
+  end
+  resolved_root = vim.fs.normalize(resolved_root)
+
+  local resolved_path = vim.uv.fs_realpath(path)
+  if resolved_path then
+    resolved_path = vim.fs.normalize(resolved_path)
+    return M.is_subpath(resolved_path, resolved_root), resolved_path, resolved_root
+  elseif not opts.allow_missing or vim.uv.fs_lstat(path) then
+    return false, nil, resolved_root
+  end
+
+  local ancestor = vim.fs.dirname(path)
+  while ancestor and ancestor ~= "" do
+    local resolved_ancestor = vim.uv.fs_realpath(ancestor)
+    if resolved_ancestor then
+      resolved_ancestor = vim.fs.normalize(resolved_ancestor)
+      return M.is_subpath(resolved_ancestor, resolved_root), nil, resolved_root
+    elseif vim.uv.fs_lstat(ancestor) then
+      return false, nil, resolved_root
+    end
+    local parent = vim.fs.dirname(ancestor)
+    if parent == ancestor then
+      break
+    end
+    ancestor = parent
+  end
+  return false, nil, resolved_root
 end
 
 ---@param path string

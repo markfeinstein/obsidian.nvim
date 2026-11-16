@@ -187,6 +187,20 @@ T["cache backends"]["omits nested frontmatter properties but keeps scalar lists"
   eq({ custom = "value", labels = { "one", "two" } }, row.properties)
 end
 
+T["cache backends"]["preserves empty collection identity for complete properties"] = function()
+  local dir = Path.temp { suffix = "-obsidian-cache" }
+  dir:mkdir { parents = true }
+  Obsidian = { dir = dir }
+  local note_path = tostring(dir / "Collections.md")
+  helpers.write("---\nempty_object: {}\nempty_list: []\n---\n# Collections", note_path)
+
+  local row = require("obsidian.cache.note").build(note_path, tostring(dir), { preserve_properties = true })
+  eq(false, vim.islist(row.properties.empty_object))
+  eq("{}", vim.json.encode(row.properties.empty_object))
+  eq(true, vim.islist(row.properties.empty_list))
+  eq("[]", vim.json.encode(row.properties.empty_list))
+end
+
 T["cache backends"]["computes backlink counts from cached links"] = function()
   local dir = Path.temp { suffix = "-obsidian-cache" }
   dir:mkdir { parents = true }
@@ -462,8 +476,14 @@ T["cache backends"]["file watcher registers notes and attachments"] = function()
   local watched = {}
   for _, watcher in ipairs(captured.registrations[1].registerOptions.watchers) do
     local ext = watcher.globPattern:match "%.([^%.]+)$"
-    watched[ext] = true
+    if ext then
+      watched[ext] = true
+    end
+    if watcher.globPattern == "**/*" then
+      watched.all = true
+    end
   end
+  eq(true, watched.all)
 
   for _, ext in ipairs(require("obsidian.filetypes").note_extensions) do
     eq(true, watched[ext])

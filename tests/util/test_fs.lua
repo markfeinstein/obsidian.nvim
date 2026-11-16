@@ -26,4 +26,13 @@ T["atomic_write"] = function()
   vim.fn.delete(path)
 end
 
+T["creation_time prefers birth time and falls back only when unavailable"] = function()
+  local born = { sec = 123, nsec = 456 }
+  local changed = { sec = 789, nsec = 123 }
+  eq(born, M.creation_time { birthtime = born, ctime = changed })
+  eq(changed, M.creation_time { birthtime = { sec = 0, nsec = 0 }, ctime = changed })
+  eq(changed, M.creation_time { ctime = changed })
+  eq(nil, M.creation_time {})
+end
+
 return T

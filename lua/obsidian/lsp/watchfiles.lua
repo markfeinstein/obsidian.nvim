@@ -4,7 +4,16 @@ local M = {}
 
 local handlers = {}
 
----@param handler fun(events: lsp.FileEvent[], raw_changes: lsp.FileEvent[])
+---@class obsidian.lsp.FileEvent
+---@field type integer|string|nil
+---@field uri string|nil
+---@field path string|nil
+---@field old_uri string|nil
+---@field old_path string|nil
+---@field new_uri string|nil
+---@field new_path string|nil
+
+---@param handler fun(events: obsidian.lsp.FileEvent[], raw_changes: lsp.FileEvent[])
 ---@return fun()
 M.register_handler = function(handler)
   handlers[#handlers + 1] = handler
@@ -23,8 +32,8 @@ M.reset_handlers = function()
   handlers = {}
 end
 
----@param event table
----@return table
+---@param event lsp.FileEvent|obsidian.lsp.FileEvent
+---@return obsidian.lsp.FileEvent
 local function normalize_event(event)
   local normalized = vim.tbl_extend("force", {}, event)
   if normalized.uri then
@@ -45,8 +54,8 @@ local function normalize_event(event)
   return normalized
 end
 
----@param events lsp.FileEvent[]
----@return lsp.FileEvent[]
+---@param events lsp.FileEvent[]|obsidian.lsp.FileEvent[]
+---@return obsidian.lsp.FileEvent[]
 M.handle = function(events)
   local normalized_events = {}
   for i, event in ipairs(events) do

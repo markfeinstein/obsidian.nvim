@@ -91,6 +91,8 @@ T["initialized dynamically registers note and attachment watchers"] = function()
   eq(kind, glob_to_kind["**/*.md"])
   eq(kind, glob_to_kind["**/*.markdown"])
   eq(kind, glob_to_kind["**/*.png"])
+  eq(kind, glob_to_kind["**/*"])
+  eq(kind, glob_to_kind["**/.obsidian/types.json"])
 end
 
 T["didChangeWatchedFiles emits LSP create and delete events"] = function()

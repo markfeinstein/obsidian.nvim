@@ -4,8 +4,28 @@ local Range = require "obsidian.range"
 local parse_refs = require "obsidian.parse.refs"
 local parse_tasks = require "obsidian.parse.line.tasks"
 local tags = require "obsidian.tag"
+local fs_util = require "obsidian.util.fs"
 
 local M = {}
+
+---@param lines string[]
+---@return string[]
+local function normalize_line_endings(lines)
+  local normalized
+  for i, line in ipairs(lines) do
+    local value = line:gsub("\r$", "")
+    if normalized then
+      normalized[i] = value
+    elseif value ~= line then
+      normalized = {}
+      for previous = 1, i - 1 do
+        normalized[previous] = lines[previous]
+      end
+      normalized[i] = value
+    end
+  end
+  return normalized or lines
+end
 
 ---@param value any
 ---@return boolean
@@ -54,26 +74,19 @@ local function extract_links(line, lnum, document)
   return out
 end
 
----Convert obsidian.Note + stat → CacheNote row.
+---Convert source lines + stat → CacheNote row.
 ---@param abs_path string
----@param _vault_root string
+---@param lines string[]
+---@param stat uv.fs_stat.result|nil
+---@param opts { preserve_properties: boolean? }|nil
 ---@return table? row
-function M.build(abs_path, _vault_root)
-  local stat = vim.uv.fs_stat(abs_path)
+function M.build_from_lines(abs_path, lines, stat, opts)
+  opts = opts or {}
+  lines = normalize_line_endings(lines)
+  stat = stat or vim.uv.fs_stat(abs_path)
   if not stat or stat.type ~= "file" then
     return nil
   end
-
-  -- Read file once; reuse lines for both Note parser and link/task extractors.
-  local fh = io.open(abs_path, "r")
-  if not fh then
-    return nil
-  end
-  local lines = {}
-  for line in fh:lines() do
-    lines[#lines + 1] = line
-  end
-  fh:close()
 
   local document = Document.parse(lines)
   local ok, note = pcall(Note.from_lines, lines, abs_path, {
@@ -92,9 +105,11 @@ function M.build(abs_path, _vault_root)
   if #note.tags == 0 then
     properties.tags = nil
   end
-  for k, v in pairs(properties) do
-    if not is_cacheable_property(v) then
-      properties[k] = nil
+  if not opts.preserve_properties then
+    for k, v in pairs(properties) do
+      if not is_cacheable_property(v) then
+        properties[k] = nil
+      end
     end
   end
   local tags_lower = {}
@@ -152,11 +167,14 @@ function M.build(abs_path, _vault_root)
     end
   end
 
+  local created = fs_util.creation_time(stat)
   local row = {
     kind = "note",
     stat = {
       mtime_sec = stat.mtime.sec,
       mtime_nsec = stat.mtime.nsec,
+      ctime_sec = created and created.sec or nil,
+      ctime_nsec = created and created.nsec or nil,
       size = stat.size,
     },
   }
@@ -183,6 +201,31 @@ function M.build(abs_path, _vault_root)
     row.tasks = tasks
   end
   return row
+end
+
+---Convert a note file + stat → CacheNote row.
+---@param abs_path string
+---@param _vault_root string
+---@param opts { preserve_properties: boolean? }|nil
+---@return table? row
+function M.build(abs_path, _vault_root, opts)
+  local stat = vim.uv.fs_stat(abs_path)
+  if not stat or stat.type ~= "file" then
+    return nil
+  end
+
+  -- Read file once; reuse lines for both Note parser and link/task extractors.
+  local fh = io.open(abs_path, "r")
+  if not fh then
+    return nil
+  end
+  local lines = {}
+  for line in fh:lines() do
+    lines[#lines + 1] = line
+  end
+  fh:close()
+
+  return M.build_from_lines(abs_path, lines, stat, opts)
 end
 
 return M

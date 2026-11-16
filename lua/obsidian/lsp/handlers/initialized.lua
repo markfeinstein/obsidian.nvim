@@ -18,12 +18,24 @@ end
 
 local function watcher_registration()
   local watchers = {}
+  local kind = WatchKind.Create + WatchKind.Change + WatchKind.Delete
   for _, ext in ipairs(watched_filetypes()) do
     watchers[#watchers + 1] = {
       globPattern = "**/*." .. ext,
-      kind = WatchKind.Create + WatchKind.Change + WatchKind.Delete,
+      kind = kind,
     }
   end
+  watchers[#watchers + 1] = {
+    globPattern = "**/*",
+    kind = kind,
+  }
+  local opts = Obsidian.opts or {}
+  local config_dir = opts.sync and opts.sync.config_dir or ".obsidian"
+  config_dir = config_dir:gsub("^[/\\]+", ""):gsub("[/\\]+$", "")
+  watchers[#watchers + 1] = {
+    globPattern = "**/" .. config_dir .. "/types.json",
+    kind = kind,
+  }
 
   return {
     registrations = {
