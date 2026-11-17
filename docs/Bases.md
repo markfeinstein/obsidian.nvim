@@ -34,6 +34,31 @@ Then use:
 
 With the cursor on `![[Projects.base]]`, `![[Projects.base#Active]]`, or inside a fenced `base` block, `:Obsidian bases` opens that definition. Linked Base embeds also display a read-only virtual-line action hint. The Markdown source is not changed.
 
+Automatic inline results and standalone `.base` rendering are opt-in:
+
+```lua
+require("obsidian").setup {
+  bases = {
+    inline = {
+      enabled = true,
+      debounce_ms = 120,
+      max_rows = 20,
+      max_width = 100,
+      max_diagnostics = 4,
+    },
+    standalone = {
+      auto_open = true,
+    },
+  },
+}
+```
+
+When inline rendering is enabled, every eligible linked or fenced Base in an opened vault note evaluates automatically with the containing note pinned as `this.file`. Results appear as extmark virtual lines below the embed or fenced block; they never change buffer text, modified state, or on-disk bytes. Table and list views render natively. Other presentation types use an explicit bounded table fallback inline while remaining available in the full workspace.
+
+Use `:Obsidian bases-inline toggle`, `:Obsidian bases-inline refresh`, `:Obsidian bases-inline enable`, or `:Obsidian bases-inline disable` to control the current note. Manual refresh invalidates only the originating vault index before reevaluation. Inline output is bounded by `max_rows`, `max_width`, and `max_diagnostics`.
+
+When standalone auto-open is enabled, opening an eligible `.base` file inside a configured vault replaces the current window with its rendered workspace. Use `:Obsidian bases --raw` to return to the source definition. That buffer remains in raw-edit mode for subsequent reads, avoiding automatic-render recursion; `:Obsidian bases` still renders it explicitly.
+
 Linked targets prefer an exact file beside the containing note, then an exact vault-root path. Otherwise, shortest-path targets such as `![[Projects.base]]` or `![[Bases/Projects.base#Active]]` resolve only when a unique eligible vault file matches. The bounded fallback excludes internal, ignored, and outside-real-vault files; ambiguous targets require a more specific vault-relative path. Absolute and explicitly relative targets never fall back to a different file elsewhere.
 
 Workspace actions:
@@ -71,6 +96,8 @@ The implementation is modular under `lua/obsidian/bases/`:
 - `compare.lua` owns the bounded, explicitly confirmed `obsidian base:query ... format=json` comparison, snapshot comparability checks, and path-set diagnostics.
 - `scope.lua` captures each workspace's originating real vault root, config directory, and ignore rules so later workspace switches cannot redirect its query, image, edit, or CLI operations.
 - `embed.lua` and `parse/embeds.lua` resolve linked and fenced definitions with source-aware Markdown exclusions and pinned containing-note context.
+- `inline.lua` reconciles all embedded definitions in a note, renders bounded extmark virtual lines, debounces source and watched-file refreshes, rejects obsolete callbacks, and disposes per-embed queries as definitions disappear.
+- `standalone.lua` handles opt-in current-window rendering for vault `.base` files and the explicit raw-definition escape.
 
 The result identity includes the vault, Base identity and revision, selected view, pinned context path and revision, and evaluator backend/version.
 
@@ -169,7 +196,8 @@ Focused mini.test coverage in a prepared development checkout includes:
 - Official CLI command construction, JSON path extraction, match/difference summaries, explicit confirmation, saved-revision and overlay comparability checks, stale comparison cleanup, and unavailable/error states.
 - Simulated stable-Neovim capability paths with `vim.ui.img` and `vim.async` absent, guarded `vim.system` setup failures, and cards text fallback.
 - Real `:Obsidian bases` command execution, read-only rendering, note navigation, refresh, and operation without Obsidian desktop.
-- Linked and fenced embedded Bases, source exclusions, discoverable inline actions, and pinned context.
+- Linked and fenced embedded Bases, named views, multiple automatic inline results, source exclusions, bounded extmark output, stale-callback rejection, cleanup, discoverable actions, and distinct pinned daily-note contexts.
+- Standalone `.base` automatic workspace entry, raw-definition escape, and outside-vault exclusion.
 
 Actual `NVIM v0.13.0-nightly` terminal UI runs confirmed the workspace layout, arbitrary file rows, dependency-gated backlinks rendered as source paths, grouped lists, Kanban navigation, cards navigation, and immediate result refresh. In the attached Rex terminal, a cards workspace reflowed from three to two columns when its active window narrowed; the selected-card behavior is covered by the same real workspace path in focused tests. The `t` action changed `priority` from text to number in a modified metadata buffer while the on-disk `.obsidian/types.json` remained byte-for-byte unchanged. Earlier runs confirmed explicit single-image and viewport-thumbnail display and cleanup.
 

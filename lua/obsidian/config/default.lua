@@ -68,6 +68,32 @@ return {
     ignore_filters = {},
   },
 
+  ---@class obsidian.config.BasesInlineOpts
+  ---@field enabled? boolean
+  ---@field debounce_ms? integer
+  ---@field max_rows? integer
+  ---@field max_width? integer
+  ---@field max_diagnostics? integer
+
+  ---@class obsidian.config.BasesStandaloneOpts
+  ---@field auto_open? boolean
+
+  ---@class obsidian.config.BasesOpts
+  ---@field inline? obsidian.config.BasesInlineOpts
+  ---@field standalone? obsidian.config.BasesStandaloneOpts
+  bases = {
+    inline = {
+      enabled = false,
+      debounce_ms = 120,
+      max_rows = 20,
+      max_width = 100,
+      max_diagnostics = 4,
+    },
+    standalone = {
+      auto_open = false,
+    },
+  },
+
   ---@class obsidian.config.FrontmatterOpts
   ---
   --- Whether to enable frontmatter, boolean for global on/off, or a function that takes filename and returns boolean.

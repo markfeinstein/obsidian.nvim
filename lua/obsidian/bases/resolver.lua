@@ -85,11 +85,12 @@ local function resolve_path(target, source_path, scope)
   end
 
   local outside = false
+  local included = require("obsidian.index.files").path_filter(vault_scope.index_opts(scope))
   for _, candidate in ipairs(candidates) do
     candidate = vim.fs.normalize(candidate)
     local stat = vim.uv.fs_stat(candidate)
     if stat then
-      if stat.type == "file" and vault_scope.contains(scope, candidate) then
+      if stat.type == "file" and vault_scope.contains(scope, candidate) and included(candidate) then
         return candidate, nil
       elseif not vault_scope.contains(scope, candidate) then
         outside = true

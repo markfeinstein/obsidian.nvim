@@ -75,6 +75,10 @@ local function bufenter_callback(ev)
 
   require("obsidian.lsp").start(ev.buf)
   require("obsidian.embed").attach(ev.buf)
+  local inline_bases = opts.bases.inline
+  if inline_bases and inline_bases.enabled and vim.b[ev.buf].obsidian_bases_inline_disabled ~= true then
+    require("obsidian.bases.inline").attach(ev.buf)
+  end
 
   if opts.footer.enabled then
     require("obsidian.footer").start(ev.buf)

@@ -15,6 +15,12 @@ T["table geometry uses display cells without changing source values"] = function
   eq(original, rows)
 end
 
+T["fits table columns within bounded inline display widths"] = function()
+  local fitted = layout.fit_table_widths({ 40, 30, 20 }, 32)
+  eq(true, fitted[1] >= 3 and fitted[2] >= 3 and fitted[3] >= 3)
+  eq(true, fitted[1] + fitted[2] + fitted[3] + 6 <= 32)
+end
+
 T["board and gallery geometry retain row identity without mutating results"] = function()
   local rows = {
     { path = "/vault/A.md", cells = { "界", "first" }, file = { path = "A.md" } },

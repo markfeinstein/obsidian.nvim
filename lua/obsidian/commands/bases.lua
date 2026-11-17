@@ -1,5 +1,9 @@
 return function(data)
   local bases = require "obsidian.bases"
+  if data.args == "--raw" then
+    require("obsidian.bases.standalone").open_raw()
+    return
+  end
   local target = data.args ~= "" and data.args or nil
   if not target then
     local spec, err = require("obsidian.bases.embed").at_cursor(0)

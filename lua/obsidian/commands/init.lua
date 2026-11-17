@@ -303,7 +303,23 @@ M.register("bookmarks", { nargs = 0 })
 M.register("bases", {
   nargs = "?",
   complete = function(arg)
-    return require("obsidian.bases").complete(arg)
+    local values = require("obsidian.bases").complete(arg)
+    if vim.startswith("--raw", arg) then
+      table.insert(values, 1, "--raw")
+    end
+    return values
+  end,
+})
+
+M.register("bases-inline", {
+  nargs = "?",
+  func = function(data)
+    require "obsidian.commands.bases_inline"(data)
+  end,
+  complete = function(arg)
+    return vim.tbl_filter(function(value)
+      return vim.startswith(value, arg)
+    end, { "toggle", "refresh", "enable", "disable" })
   end,
 })
 

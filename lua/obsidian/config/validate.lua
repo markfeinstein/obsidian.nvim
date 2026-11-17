@@ -96,6 +96,7 @@ local sync_config_categories = vim.tbl_values(types.SyncConfigCategory)
 local config_sections = {
   "attachments",
   "backlinks",
+  "bases",
   "cache",
   "checkbox",
   "comment",
@@ -169,8 +170,32 @@ local function validate_char_spec(errors, name, value)
   })
 end
 
+local function positive_integer(value)
+  return integer(value) and value > 0
+end
+
 ---@param errors string[]
 ---@param opts table
+local function validate_bases(errors, opts)
+  local bases = opts.bases
+  if bases == nil then
+    return
+  end
+  if not check(errors, "bases", bases, "table") then
+    return
+  end
+  nested_fields(errors, "bases.inline", bases.inline, {
+    { "enabled", "boolean" },
+    { "debounce_ms", positive_integer, "positive integer" },
+    { "max_rows", positive_integer, "positive integer" },
+    { "max_width", positive_integer, "positive integer" },
+    { "max_diagnostics", positive_integer, "positive integer" },
+  })
+  nested_fields(errors, "bases.standalone", bases.standalone, {
+    { "auto_open", "boolean" },
+  })
+end
+
 local function validate_ui(errors, opts)
   local ui = opts.ui
   if ui == nil then
@@ -304,6 +329,7 @@ function M.validate(opts, skip_workspace_overrides)
     { "legacy_commands", "boolean" },
   })
   validate_workspaces(errors, opts, skip_workspace_overrides)
+  validate_bases(errors, opts)
 
   nested_fields(errors, "statusline", opts.statusline, {
     { "format", "string" },

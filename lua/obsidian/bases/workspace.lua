@@ -48,6 +48,7 @@ local M = {}
 ---@field comparison_generation integer
 ---@field comparison_job any|nil
 ---@field reflow_pending boolean
+---@field raw_buf integer|nil
 
 ---@type table<integer, obsidian.bases.WorkspaceState>
 local states = {}
@@ -1131,14 +1132,22 @@ local function install_actions(state)
 end
 
 ---@param spec table
+---@param open_opts { current: boolean?, raw_buf: integer? }|nil
 ---@return integer buf
-function M.open(spec)
+function M.open(spec, open_opts)
+  open_opts = open_opts or {}
   local scope = spec.scope and vault_scope.copy(spec.scope)
     or assert(vault_scope.capture(spec.context_path or spec.path))
   spec = vim.tbl_extend("force", {}, spec, { scope = scope })
-  vim.cmd "botright new"
-  local buf = vim.api.nvim_get_current_buf()
   local original_wrap = vim.wo.wrap
+  local buf
+  if open_opts.current then
+    buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_win_set_buf(0, buf)
+  else
+    vim.cmd "botright new"
+    buf = vim.api.nvim_get_current_buf()
+  end
   local name = ("obsidian-bases://%s#%s"):format(spec.path or "inline", spec.view or "")
   pcall(vim.api.nvim_buf_set_name, buf, name)
   vim.bo[buf].buftype = "nofile"
@@ -1182,6 +1191,7 @@ function M.open(spec)
     comparison_generation = 0,
     comparison_job = nil,
     reflow_pending = false,
+    raw_buf = open_opts.raw_buf,
   }
   states[buf] = state
   install_actions(state)

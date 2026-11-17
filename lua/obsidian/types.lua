@@ -123,6 +123,7 @@ M.SyncConfigCategory = {
 ---@field log_level? integer
 ---@field notes_subdir? string
 ---@field file? obsidian.config.FileOpts
+---@field bases? obsidian.config.BasesOpts
 ---@field templates? obsidian.config.TemplateOpts
 ---@field new_notes_location? obsidian.config.NewNotesLocation
 ---@field note_id_func? (fun(title: string|?, path: obsidian.Path|?): string)|?
@@ -157,6 +158,7 @@ M.SyncConfigCategory = {
 ---@field log_level integer
 ---@field notes_subdir string|?
 ---@field file obsidian.config.FileOpts
+---@field bases obsidian.config.BasesOpts
 ---@field templates obsidian.config.TemplateOpts
 ---@field new_notes_location obsidian.config.NewNotesLocation
 ---@field note_id_func (fun(id: string|?, path: obsidian.Path|?): string)

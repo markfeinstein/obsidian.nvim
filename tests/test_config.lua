@@ -102,6 +102,23 @@ T["normalize"]["should validate picker.name during setup"] = function()
   eq(true, tostring(err):match '"snacks.picker"' ~= nil)
 end
 
+T["normalize"]["should merge and validate Bases rendering options"] = function()
+  local opts = normalize {
+    bases = {
+      inline = { enabled = true, max_rows = 7 },
+      standalone = { auto_open = true },
+    },
+  }
+  eq(true, opts.bases.inline.enabled)
+  eq(7, opts.bases.inline.max_rows)
+  eq(100, opts.bases.inline.max_width)
+  eq(true, opts.bases.standalone.auto_open)
+
+  local ok, err = pcall(normalize, { bases = { inline = { debounce_ms = 0 } } })
+  eq(false, ok)
+  eq(true, tostring(err):match "bases.inline.debounce_ms: expected positive integer" ~= nil)
+end
+
 T["normalize"]["should validate workspace overrides during setup"] = function()
   local ok, err = pcall(normalize, {
     workspaces = {

@@ -41,6 +41,30 @@ local function table_widths(rows, columns)
   return widths
 end
 
+local function fit_table_widths(widths, available_width)
+  local fitted = vim.deepcopy(widths)
+  local separators = math.max(0, (#fitted - 1) * 3)
+  local target = math.max(#fitted * 3, math.floor(available_width) - separators)
+  local total = 0
+  for _, width in ipairs(fitted) do
+    total = total + width
+  end
+  while total > target do
+    local widest_index, widest_width
+    for index, width in ipairs(fitted) do
+      if width > 3 and (not widest_width or width > widest_width) then
+        widest_index, widest_width = index, width
+      end
+    end
+    if not widest_index then
+      break
+    end
+    fitted[widest_index] = fitted[widest_index] - 1
+    total = total - 1
+  end
+  return fitted
+end
+
 local function table_lines(rows, columns, widths)
   local function line(values)
     local cells = {}
@@ -256,6 +280,7 @@ end
 M.single_line = single_line
 M.truncate = truncate
 M.table_widths = table_widths
+M.fit_table_widths = fit_table_widths
 M.table_lines = table_lines
 M.list_lines = list_lines
 M.board_lines = board_lines

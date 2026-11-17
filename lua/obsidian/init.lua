@@ -108,6 +108,7 @@ obsidian.setup = function(user_opts)
 
   -- Register autocmds for keymaps, options and custom callbacks
   require "obsidian.autocmds"
+  require("obsidian.bases.standalone").setup()
 
   -- Set global client.
   obsidian._client = client
