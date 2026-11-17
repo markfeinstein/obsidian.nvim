@@ -402,7 +402,7 @@ for _, card in ipairs(state.gallery_cards) do
 end
 ]]
   )
-  child.type_keys "<CR>"
+  child.lua "vim.lsp.buf.definition()"
   h.child_wait_for_buf_name(child, files["E.md"])
   eq(true, child.lua_get "vim.wo.wrap")
 end
@@ -884,6 +884,8 @@ return vim.bo.filetype == "obsidian-bases"
 
   eq(true, child.lua_get "vim.bo.readonly")
   eq(false, child.lua_get "vim.bo.modifiable")
+  eq(true, child.lua_get "vim.wo.cursorline")
+  h.child_wait_for_lsp_client(child, "obsidian-ls")
   local lines = child.api.nvim_buf_get_lines(0, 0, -1, false)
   eq(
     true,
@@ -912,8 +914,9 @@ for index, line in ipairs(lines) do
 end
 ]]
   child.api.nvim_win_set_cursor(0, { row, 0 })
-  child.type_keys "<CR>"
+  child.lua "vim.lsp.buf.definition()"
   h.child_wait_for_buf_name(child, files["One.md"])
+  eq(false, child.lua_get "vim.wo.cursorline")
 end
 
 T["real command filters wikilink properties while preserving editable source values"] = function()

@@ -61,9 +61,11 @@ When standalone auto-open is enabled, opening an eligible `.base` file inside a 
 
 Linked targets prefer an exact file beside the containing note, then an exact vault-root path. Otherwise, shortest-path targets such as `![[Projects.base]]` or `![[Bases/Projects.base#Active]]` resolve only when a unique eligible vault file matches. The bounded fallback excludes internal, ignored, and outside-real-vault files; ambiguous targets require a more specific vault-relative path. Absolute and explicitly relative targets never fall back to a different file elsewhere.
 
+Workspace result rows are ordinary selectable buffer lines with `cursorline` enabled. The workspace attaches `obsidian-ls`, so `vim.lsp.buf.definition()` and any LSP definition mapping resolve the note or file represented by the row. This also works for the card under the cursor in Kanban and cards views.
+
 Workspace actions:
 
-- `<CR>` opens the note on a result row or toggles the current group heading.
+- `<CR>` opens the note or file on a result row or toggles the current group heading.
 - `e` edits or adds the top-level note property under a table cell. Scalar, link/date-shaped string, and scalar-list cells use type-aware prompts. Only parsed `md`, `markdown`, and `qmd` note rows inside the originating vault are editable; attachments, `.base` definitions, and other files remain read-only. List-layout rows remain navigation-only.
 - `t` changes the note property under the selected table cell in an unsaved, conflict-checked `.obsidian/types.json` buffer.
 - `]g` and `[g` move to the next or previous group or Kanban column.

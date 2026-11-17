@@ -34,6 +34,7 @@ local M = {}
 ---@field gallery_cards table[]
 ---@field gallery_columns integer
 ---@field original_wrap boolean
+---@field original_cursorline boolean
 ---@field image_id integer|nil
 ---@field thumbnails_enabled boolean
 ---@field thumbnails_supported boolean
@@ -258,7 +259,7 @@ local function render(state, result)
     ("Results: %d matched · %d candidates"):format(result.matched_count, result.source_count),
     state.comparison and ("Obsidian CLI comparison: " .. state.comparison.summary)
       or "Obsidian CLI comparison: not run · C compare explicitly",
-    "Actions: <CR> open/toggle · e edit · t property type · C compare · hjkl cards · i image · I thumbnails · [g/]g groups · r refresh · q close",
+    "Actions: <CR> open/toggle · LSP definition open row · e edit · t property type · C compare · hjkl cards · i image · I thumbnails · [g/]g groups · r refresh · q close",
   }
   if state.comparison and state.comparison.diagnostics then
     local local_only = state.comparison.diagnostics.only_local or {}
@@ -392,6 +393,7 @@ local function render(state, result)
     )
   end
   for _, win in ipairs(vim.fn.win_findbuf(state.buf)) do
+    vim.wo[win].cursorline = true
     if state.board_mode or state.cards_mode then
       vim.wo[win].wrap = false
     else
@@ -572,6 +574,36 @@ local function active_card_under_cursor(state)
   return board_card_under_cursor(state) or gallery_card_under_cursor(state)
 end
 
+local function row_at_position(state, position)
+  local line = position.line + 1
+  local row = state.line_rows[line]
+  if row then
+    return row
+  end
+
+  local ok, virtual_column = pcall(vim.api.nvim_buf_call, state.buf, function()
+    return vim.fn.virtcol { line, position.character + 1 }
+  end)
+  if not ok then
+    virtual_column = position.character + 1
+  end
+  for _, card in ipairs(state.board_cards) do
+    if card.line == line and card.vstart <= virtual_column and virtual_column <= card.vfinish then
+      return card.row
+    end
+  end
+  for _, card in ipairs(state.gallery_cards) do
+    if
+      card.start_line <= line
+      and line <= card.end_line
+      and card.vstart <= virtual_column
+      and virtual_column <= card.vfinish
+    then
+      return card.row
+    end
+  end
+end
+
 local function board_card(state, group_index, card_index)
   for _, card in ipairs(state.board_cards) do
     if card.group_index == group_index and card.card_index == card_index then
@@ -716,6 +748,7 @@ local function open_row(state)
     clear_image(state)
     clear_thumbnails(state)
     vim.wo.wrap = state.original_wrap
+    vim.wo.cursorline = state.original_cursorline
     vim.cmd.edit(vim.fn.fnameescape(card.row.path))
     return
   end
@@ -727,6 +760,7 @@ local function open_row(state)
     clear_image(state)
     clear_thumbnails(state)
     vim.wo.wrap = state.original_wrap
+    vim.wo.cursorline = state.original_cursorline
     vim.cmd.edit(vim.fn.fnameescape(path))
   end
 end
@@ -1121,11 +1155,12 @@ local function install_actions(state)
   vim.keymap.set("n", "q", function()
     clear_image(state)
     vim.wo.wrap = state.original_wrap
+    vim.wo.cursorline = state.original_cursorline
     vim.api.nvim_buf_delete(state.buf, {})
   end, vim.tbl_extend("force", opts, { desc = "Bases: close workspace" }))
   vim.keymap.set("n", "?", function()
     vim.notify(
-      "Bases actions: <CR> open/toggle, e edit, t property type, C CLI compare, hjkl cards, i image, I thumbnails, [g/]g groups, r refresh, q close",
+      "Bases actions: <CR> open/toggle, LSP definition open row, e edit, t property type, C CLI compare, hjkl cards, i image, I thumbnails, [g/]g groups, r refresh, q close",
       vim.log.levels.INFO
     )
   end, vim.tbl_extend("force", opts, { desc = "Bases: show actions" }))
@@ -1140,6 +1175,7 @@ function M.open(spec, open_opts)
     or assert(vault_scope.capture(spec.context_path or spec.path))
   spec = vim.tbl_extend("force", {}, spec, { scope = scope })
   local original_wrap = vim.wo.wrap
+  local original_cursorline = vim.wo.cursorline
   local buf
   if open_opts.current then
     buf = vim.api.nvim_create_buf(false, true)
@@ -1177,6 +1213,7 @@ function M.open(spec, open_opts)
     gallery_cards = {},
     gallery_columns = 3,
     original_wrap = original_wrap,
+    original_cursorline = original_cursorline,
     image_id = nil,
     thumbnails_enabled = false,
     thumbnails_supported = false,
@@ -1195,6 +1232,7 @@ function M.open(spec, open_opts)
   }
   states[buf] = state
   install_actions(state)
+  require("obsidian.lsp").start(buf, { root_dir = scope.vault })
 
   -- Unload/delete events run before the source overlay disappears. Debounce
   -- their refresh just like text changes so collection observes the final state.
@@ -1233,6 +1271,8 @@ function M.open(spec, open_opts)
     group = state.group,
     buffer = buf,
     callback = function()
+      vim.wo.cursorline = true
+      vim.wo.wrap = not state.board_mode and not state.cards_mode and state.original_wrap or false
       schedule_card_reflow(state)
       schedule_thumbnail_update(state)
     end,
@@ -1243,6 +1283,8 @@ function M.open(spec, open_opts)
     callback = function()
       clear_image(state)
       clear_thumbnails(state)
+      vim.wo.wrap = state.original_wrap
+      vim.wo.cursorline = state.original_cursorline
       -- If another window still shows this buffer, recreate its placements.
       schedule_thumbnail_update(state)
     end,
@@ -1295,6 +1337,7 @@ function M.close(buf)
   end
   for _, win in ipairs(vim.fn.win_findbuf(buf)) do
     vim.wo[win].wrap = state.original_wrap
+    vim.wo[win].cursorline = state.original_cursorline
   end
   if state.query then
     state.query:dispose()
@@ -1318,6 +1361,16 @@ function M.get(buf)
     buf = vim.api.nvim_get_current_buf()
   end
   return states[buf]
+end
+
+---@param buf integer
+---@param position { line: integer, character: integer }
+---@return table|nil
+function M.row_at_position(buf, position)
+  local state = states[buf]
+  if state then
+    return row_at_position(state, position)
+  end
 end
 
 M._cards_column_count = layout.cards_column_count

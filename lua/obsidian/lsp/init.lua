@@ -6,8 +6,10 @@ local api = require "obsidian.api"
 --- Start the lsp client
 ---
 ---@param buf integer
+---@param opts { root_dir: string? }|nil
 ---@return integer?
-lsp.start = function(buf)
+lsp.start = function(buf, opts)
+  opts = opts or {}
   local capabilities = vim.lsp.protocol.make_client_capabilities()
   capabilities.workspace = capabilities.workspace or {}
   capabilities.workspace.fileOperations =
@@ -24,7 +26,7 @@ lsp.start = function(buf)
     offset_encoding = "utf-8",
     cmd = require "obsidian.lsp.server",
     init_options = {},
-    root_dir = tostring(api.resolve_workspace_dir(vim.api.nvim_buf_get_name(buf))),
+    root_dir = opts.root_dir or tostring(api.resolve_workspace_dir(vim.api.nvim_buf_get_name(buf))),
   }
 
   local warning = lsp_util.check_completion_availability()
