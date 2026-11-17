@@ -52,6 +52,7 @@ The second form targets the current note. Block previews are not truncated. A mi
 | Content        | Status    | Notes                                                                                |
 | -------------- | --------- | ------------------------------------------------------------------------------------ |
 | Markdown notes | Available | Whole notes are paged; heading and block fragments render their complete ranges.     |
+| Bases          | Available | Focusable result panels are anchored below linked and fenced Base definitions.       |
 | Images         | Planned   | Built-in inline rendering is planned. See [[Images]] for `snacks.image` integration. |
 | Audio          | Planned   | Playback controls need a dedicated inline interface.                                 |
 | PDF            | Planned   | The renderer will need page selection and terminal-compatible output.                |
@@ -60,7 +61,7 @@ The second form targets the current note. Block previews are not truncated. A mi
 
 ## Canvas and Bases
 
-Inline Canvas rendering and full inline Bases views are not planned for the current extmark preview model and Neovim TUI. Linked and fenced Base definitions can instead show a read-only action hint; `:Obsidian bases` opens the experimental native workspace described in [[Bases]].
+Inline Canvas rendering is not planned for the current extmark preview model. Bases use a different presentation: focusable scratch-buffer panels occupy virtual-line-reserved space below linked or fenced definitions. This keeps note text unchanged while allowing row selection and definition navigation. See [[Bases]] for setup, controls, and the full workspace.
 
 ## See also
 

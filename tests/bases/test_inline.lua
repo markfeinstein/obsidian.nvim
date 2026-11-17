@@ -28,11 +28,13 @@ end
 local function rendered_text(buf)
   return child.lua_get(([[
 (function()
+  local state = require("obsidian.bases.inline").get(%d)
   local text = {}
-  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(%d, require("obsidian.bases.inline")._namespace, 0, -1, { details = true })) do
-    for _, line in ipairs(mark[4].virt_lines or {}) do
-      for _, chunk in ipairs(line) do text[#text + 1] = chunk[1] end
-    end
+  local anchors = vim.tbl_keys(state and state.panels or {})
+  table.sort(anchors)
+  for _, anchor in ipairs(anchors) do
+    local panel = state.panels[anchor]
+    vim.list_extend(text, vim.api.nvim_buf_get_lines(panel.buf, 0, -1, false))
   end
   return table.concat(text, "\n")
 end)()
@@ -83,14 +85,73 @@ return true
 ]],
     { timeout = 5000, desc = "two inline Base results" }
   )
+  h.child_wait(
+    child,
+    [[
+local state = require("obsidian.bases.inline").get(0)
+if not state or vim.tbl_count(state.panels) ~= 2 then return false end
+for _, panel in pairs(state.panels) do
+  if #vim.fn.win_findbuf(panel.buf) == 0 then return false end
+end
+return true
+]],
+    { desc = "focusable inline Base panels" }
+  )
   eq(false, child.bo.modified)
   eq(vim.split(source, "\n", { plain = true }), child.api.nvim_buf_get_lines(first, 0, -1, false))
   eq(vim.split(source, "\n", { plain = true }), vim.fn.readfile(files["A/Daily.md"]))
+  eq(
+    true,
+    child.lua [[
+local state = require("obsidian.bases.inline").get(0)
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(0, require("obsidian.bases.inline")._namespace, 0, -1, { details = true })) do
+  for _, line in ipairs(mark[4].virt_lines or {}) do
+    for _, chunk in ipairs(line) do
+      if chunk[1] ~= "" then return false end
+    end
+  end
+end
+return true
+]]
+  )
   local text = rendered_text(first)
   eq(true, text:find("Base · Named · ready/current", 1, true) ~= nil)
   eq(true, text:find("Base · Inline · ready/current", 1, true) ~= nil)
   eq(true, text:find("A/Daily.md", 1, true) ~= nil)
   eq(false, text:find("B/Daily.md", 1, true) ~= nil)
+
+  h.child_wait_for_lsp_client(child, "obsidian-ls")
+  child.lua [[
+local state = require("obsidian.bases.inline").get(0)
+for _, panel in pairs(state.panels) do
+  for line, row in pairs(panel.line_rows) do
+    if row.file.path == "A/Other.md" then
+      local _, float = next(panel.floats)
+      vim.api.nvim_set_current_win(float)
+      vim.api.nvim_win_set_cursor(float, { line, 0 })
+      return
+    end
+  end
+end
+error("inline result row not found")
+]]
+  eq("obsidian-bases-inline", child.bo.filetype)
+  child.type_keys "V"
+  eq("V", child.fn.mode())
+  child.type_keys "<Esc>"
+  child.lua "vim.lsp.buf.definition()"
+  h.child_wait_for_buf_name(child, files["A/Other.md"])
+  eq("", child.lua_get "vim.api.nvim_win_get_config(0).relative")
+  eq(
+    true,
+    child.lua(([[
+local state = require("obsidian.bases.inline").get(%d)
+for _, panel in pairs(state.panels) do
+  if next(panel.floats) then return false end
+end
+return true
+]]):format(first))
+  )
 
   child.cmd("edit " .. vim.fn.fnameescape(files["B/Daily.md"]))
   local second = child.api.nvim_get_current_buf()

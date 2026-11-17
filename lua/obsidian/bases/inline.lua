@@ -8,7 +8,9 @@ local watchfiles = require "obsidian.lsp.watchfiles"
 local M = {}
 
 local namespace = vim.api.nvim_create_namespace "obsidian-bases-inline"
+local panel_namespace = vim.api.nvim_create_namespace "obsidian-bases-inline-panels"
 local states = {}
+local panels_by_buf = {}
 local global_group
 local unregister_watchfiles
 
@@ -26,10 +28,22 @@ end
 ---@field result obsidian.bases.Result|nil
 ---@field token integer
 
+---@class obsidian.bases.InlinePanel
+---@field buf integer
+---@field state obsidian.bases.InlineState
+---@field anchor_row integer
+---@field width integer
+---@field height integer
+---@field line_rows table<integer, table>
+---@field floats table<integer, integer> source window to floating window
+---@field sources table<integer, integer> floating window to source window
+
 ---@class obsidian.bases.InlineState
 ---@field buf integer
 ---@field enabled boolean
 ---@field items table<string, obsidian.bases.InlineItem>
+---@field panels table<integer, obsidian.bases.InlinePanel>
+---@field panel_sync_pending boolean
 ---@field timer uv.uv_timer_t|nil
 ---@field generation integer
 
@@ -54,7 +68,7 @@ local function inline_width(buf)
   local width
   for _, win in ipairs(vim.fn.win_findbuf(buf)) do
     if vim.api.nvim_win_is_valid(win) then
-      width = math.max(width or 0, vim.api.nvim_win_get_width(win))
+      width = math.min(width or math.huge, vim.api.nvim_win_get_width(win))
     end
   end
   width = width or vim.o.columns
@@ -62,8 +76,12 @@ local function inline_width(buf)
   return math.max(20, math.min(maximum, width - 4))
 end
 
-local function append_line(lines, text, hl)
-  lines[#lines + 1] = { text = layout.truncate(layout.single_line(text), lines.width), hl = hl or "Comment" }
+local function append_line(lines, text, hl, row)
+  lines[#lines + 1] = {
+    text = layout.truncate(layout.single_line(text), lines.width),
+    hl = hl or "Comment",
+    row = row,
+  }
 end
 
 local function append_table(lines, rows, columns)
@@ -73,7 +91,9 @@ local function append_table(lines, rows, columns)
   local widths = layout.fit_table_widths(layout.table_widths(rows, columns), lines.width)
   local rendered = layout.table_lines(rows, columns, widths)
   for index, line in ipairs(rendered) do
-    append_line(lines, line, index == 1 and "Title" or "Comment")
+    local row = index > 2 and rows[index - 2] or nil
+    local hl = index == 1 and "Title" or index == 2 and "Comment" or "Normal"
+    append_line(lines, line, hl, row)
   end
 end
 
@@ -97,8 +117,8 @@ local function append_rows(lines, result, max_rows)
     local batch = vim.list_slice(rows, 1, math.min(#rows, remaining))
     remaining = remaining - #batch
     if use_list then
-      for _, line in ipairs(layout.list_lines(batch)) do
-        append_line(lines, line, "Comment")
+      for index, line in ipairs(layout.list_lines(batch)) do
+        append_line(lines, line, "Normal", batch[index])
       end
     else
       append_table(lines, batch, result.columns)
@@ -118,7 +138,7 @@ local function append_rows(lines, result, max_rows)
   end
 
   if remaining == 0 and #result.rows > max_rows then
-    append_line(lines, ("… %d more rows; use :Obsidian bases for the full workspace"):format(#result.rows - max_rows))
+    append_line(lines, ("… %d more rows"):format(#result.rows - max_rows), "Comment")
   end
 end
 
@@ -163,6 +183,199 @@ local function item_lines(item, width)
   return lines
 end
 
+local function panel_source_win(panel)
+  local current = vim.api.nvim_get_current_win()
+  local source = panel.sources[current]
+  if source and vim.api.nvim_win_is_valid(source) and vim.api.nvim_win_get_buf(source) == panel.state.buf then
+    return source
+  end
+  for candidate in pairs(panel.floats) do
+    if vim.api.nvim_win_is_valid(candidate) and vim.api.nvim_win_get_buf(candidate) == panel.state.buf then
+      return candidate
+    end
+  end
+end
+
+local function close_panel_floats(panel, source_win)
+  for source, float in pairs(vim.deepcopy(panel.floats)) do
+    if not source_win or source == source_win then
+      panel.floats[source] = nil
+      panel.sources[float] = nil
+      if vim.api.nvim_win_is_valid(float) then
+        pcall(vim.api.nvim_win_close, float, true)
+      end
+    end
+  end
+end
+
+local function return_to_source(panel)
+  local source = panel_source_win(panel)
+  if source then
+    vim.api.nvim_set_current_win(source)
+    return true
+  end
+  return false
+end
+
+local function open_panel_row(panel, line)
+  local row = panel.line_rows[line]
+  if not row or not row.path then
+    return false
+  end
+  local source = panel_source_win(panel)
+  if source then
+    vim.api.nvim_set_current_win(source)
+  elseif vim.api.nvim_win_get_config(0).relative ~= "" then
+    pcall(vim.api.nvim_win_close, 0, true)
+  end
+  vim.cmd.edit(vim.fn.fnameescape(row.path))
+  return true
+end
+
+local function install_panel_actions(panel)
+  local opts_ = { buffer = panel.buf, silent = true }
+  for _, lhs in ipairs { "<CR>", "gd", "grd", "<C-]>" } do
+    vim.keymap.set("n", lhs, function()
+      if not open_panel_row(panel, vim.api.nvim_win_get_cursor(0)[1]) then
+        vim.notify("Place the cursor on a Base result row", vim.log.levels.WARN)
+      end
+    end, vim.tbl_extend("force", opts_, { desc = "Bases inline: open row" }))
+  end
+  vim.keymap.set("n", "q", function()
+    return_to_source(panel)
+  end, vim.tbl_extend("force", opts_, { desc = "Bases inline: return to note" }))
+end
+
+local function create_panel(state, anchor, root)
+  local buf = vim.api.nvim_create_buf(false, true)
+  pcall(vim.api.nvim_buf_set_name, buf, ("obsidian-bases-inline://%d/%d"):format(state.buf, anchor))
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "hide"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].filetype = "obsidian-bases-inline"
+  vim.bo[buf].modifiable = false
+  local panel = {
+    buf = buf,
+    state = state,
+    anchor_row = anchor,
+    width = 20,
+    height = 1,
+    line_rows = {},
+    floats = {},
+    sources = {},
+  }
+  state.panels[anchor] = panel
+  panels_by_buf[buf] = panel
+  install_panel_actions(panel)
+  if root then
+    require("obsidian.lsp").start(buf, { root_dir = root })
+  end
+  return panel
+end
+
+local function dispose_panel(panel)
+  close_panel_floats(panel)
+  panels_by_buf[panel.buf] = nil
+  if vim.api.nvim_buf_is_valid(panel.buf) then
+    pcall(vim.api.nvim_buf_delete, panel.buf, { force = true })
+  end
+end
+
+local function render_panel(panel, lines)
+  local text = {}
+  panel.line_rows = {}
+  for index, line in ipairs(lines) do
+    text[index] = line.text
+    if line.row then
+      panel.line_rows[index] = line.row
+    end
+  end
+  if #text == 0 then
+    text[1] = ""
+  end
+  vim.bo[panel.buf].modifiable = true
+  vim.bo[panel.buf].readonly = false
+  vim.api.nvim_buf_set_lines(panel.buf, 0, -1, false, text)
+  vim.bo[panel.buf].modifiable = false
+  vim.bo[panel.buf].readonly = true
+  vim.api.nvim_buf_clear_namespace(panel.buf, panel_namespace, 0, -1)
+  for index, line in ipairs(lines) do
+    vim.api.nvim_buf_set_extmark(panel.buf, panel_namespace, index - 1, 0, {
+      line_hl_group = line.hl,
+    })
+  end
+  panel.width = lines.width
+  panel.height = math.max(1, #text)
+end
+
+local function sync_panel_windows(state)
+  if states[state.buf] ~= state or not state.enabled then
+    return
+  end
+  local visible = {}
+  for _, source in ipairs(vim.fn.win_findbuf(state.buf)) do
+    if vim.api.nvim_win_is_valid(source) then
+      visible[source] = true
+      for _, panel in pairs(state.panels) do
+        local config = {
+          relative = "win",
+          win = source,
+          bufpos = { panel.anchor_row, 0 },
+          row = 1,
+          col = 0,
+          width = panel.width,
+          height = panel.height,
+          focusable = true,
+          mouse = true,
+          style = "minimal",
+          border = "rounded",
+          title = " Base ",
+          title_pos = "left",
+          zindex = 45,
+        }
+        local float = panel.floats[source]
+        if float and vim.api.nvim_win_is_valid(float) then
+          vim.api.nvim_win_set_config(float, config)
+        else
+          float = vim.api.nvim_open_win(panel.buf, false, config)
+          panel.floats[source] = float
+          panel.sources[float] = source
+        end
+        vim.wo[float].number = false
+        vim.wo[float].relativenumber = false
+        vim.wo[float].signcolumn = "no"
+        vim.wo[float].foldcolumn = "0"
+        vim.wo[float].statuscolumn = ""
+        vim.wo[float].wrap = false
+        vim.wo[float].cursorline = true
+        vim.wo[float].cursorlineopt = "line"
+        vim.wo[float].winhl = "Normal:Normal,FloatBorder:Comment,EndOfBuffer:Normal"
+        pcall(function()
+          vim.wo[float].winfixbuf = true
+        end)
+      end
+    end
+  end
+  for _, panel in pairs(state.panels) do
+    for source in pairs(vim.deepcopy(panel.floats)) do
+      if not visible[source] then
+        close_panel_floats(panel, source)
+      end
+    end
+  end
+end
+
+local function schedule_panel_sync(state)
+  if state.panel_sync_pending then
+    return
+  end
+  state.panel_sync_pending = true
+  vim.schedule(function()
+    state.panel_sync_pending = false
+    sync_panel_windows(state)
+  end)
+end
+
 local function draw(state)
   if states[state.buf] ~= state or not vim.api.nvim_buf_is_valid(state.buf) then
     return
@@ -179,24 +392,45 @@ local function draw(state)
     grouped[anchor][#grouped[anchor] + 1] = item
   end
   local line_count = vim.api.nvim_buf_line_count(state.buf)
+  local width = inline_width(state.buf)
+  local seen = {}
   for anchor, items in pairs(grouped) do
     table.sort(items, function(left, right)
       return left.key < right.key
     end)
-    local virtual = {}
-    for _, item in ipairs(items) do
-      for _, line in ipairs(item_lines(item, inline_width(state.buf))) do
-        virtual[#virtual + 1] = { { "▏ " .. line.text, line.hl } }
+    local lines = { width = width }
+    local root
+    for index, item in ipairs(items) do
+      if index > 1 then
+        append_line(lines, "", "Normal")
       end
+      vim.list_extend(lines, item_lines(item, width))
+      root = root or (item.spec and item.spec.scope and item.spec.scope.vault or nil)
     end
-    if #virtual > 0 and line_count > 0 then
-      vim.api.nvim_buf_set_extmark(state.buf, namespace, math.min(anchor, line_count - 1), 0, {
-        virt_lines = virtual,
+    if #lines > 0 and line_count > 0 then
+      local safe_anchor = math.min(anchor, line_count - 1)
+      local panel = state.panels[anchor] or create_panel(state, anchor, root)
+      panel.anchor_row = safe_anchor
+      render_panel(panel, lines)
+      local reserved = {}
+      for _ = 1, panel.height + 2 do
+        reserved[#reserved + 1] = { { "", "Normal" } }
+      end
+      vim.api.nvim_buf_set_extmark(state.buf, namespace, safe_anchor, 0, {
+        virt_lines = reserved,
         virt_lines_above = false,
-        hl_mode = "combine",
       })
+      seen[anchor] = true
     end
   end
+  for _, anchor in ipairs(vim.tbl_keys(state.panels)) do
+    if not seen[anchor] then
+      local panel = state.panels[anchor]
+      state.panels[anchor] = nil
+      dispose_panel(panel)
+    end
+  end
+  schedule_panel_sync(state)
 end
 
 local function dispose_item(item)
@@ -375,6 +609,27 @@ local function ensure_global_lifecycle()
         end
       end,
     })
+    vim.api.nvim_create_autocmd("BufWinEnter", {
+      group = global_group,
+      callback = function(args)
+        local state = states[args.buf]
+        if state then
+          draw(state)
+        end
+      end,
+    })
+    vim.api.nvim_create_autocmd("BufWinLeave", {
+      group = global_group,
+      callback = function(args)
+        local state = states[args.buf]
+        if state then
+          local source = vim.api.nvim_get_current_win()
+          for _, panel in pairs(state.panels) do
+            close_panel_floats(panel, source)
+          end
+        end
+      end,
+    })
     vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
       group = global_group,
       callback = function()
@@ -410,7 +665,15 @@ function M.attach(buf)
   ensure_global_lifecycle()
   local state = states[buf]
   if not state then
-    state = { buf = buf, enabled = true, items = {}, timer = nil, generation = 0 }
+    state = {
+      buf = buf,
+      enabled = true,
+      items = {},
+      panels = {},
+      panel_sync_pending = false,
+      timer = nil,
+      generation = 0,
+    }
     states[buf] = state
   else
     state.enabled = true
@@ -439,6 +702,10 @@ function M.detach(buf)
   for _, item in pairs(state.items) do
     dispose_item(item)
   end
+  for _, panel in pairs(state.panels) do
+    dispose_panel(panel)
+  end
+  state.panels = {}
   if vim.api.nvim_buf_is_valid(buf) then
     vim.api.nvim_buf_clear_namespace(buf, namespace, 0, -1)
   end
@@ -495,6 +762,23 @@ function M.enabled_by_default()
   return opts().enabled == true
 end
 
+---@param buf integer
+---@param position { line: integer, character: integer }
+---@return string|nil
+function M.definition_path(buf, position)
+  local panel = panels_by_buf[buf]
+  local row = panel and panel.line_rows[position.line + 1] or nil
+  if not row or not row.path then
+    return nil
+  end
+  vim.schedule(function()
+    if panels_by_buf[buf] == panel then
+      return_to_source(panel)
+    end
+  end)
+  return row.path
+end
+
 function M.stop()
   for _, buf in ipairs(state_buffers()) do
     M.detach(buf)
@@ -510,6 +794,8 @@ function M.stop()
 end
 
 M._namespace = namespace
+M._panel_namespace = panel_namespace
+M._panels = panels_by_buf
 M._draw = draw
 M._refresh_now = refresh_now
 

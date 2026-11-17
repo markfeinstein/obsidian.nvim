@@ -1,4 +1,3 @@
-local base_embed = require "obsidian.bases.embed"
 local BufferDocument = require "obsidian.document"
 local Document = require "obsidian.parse.document"
 local embeds = require "obsidian.parse.embeds"
@@ -304,30 +303,20 @@ M.refresh = function(buf)
       local row = line_num - 1
       local source_range = Range.new(row, match.col, row, match.end_col)
       if not document:intersects(source_range, Document.BODY_EXCLUSIONS) then
-        local base_preview = base_embed.preview(match.target, buf, row, document, match)
-        if base_preview then
-          if base_preview.path then
-            state.dependencies[normalize(base_preview.path)] = true
+        local context = resolve_context(match, buf)
+        if context then
+          if context.path then
+            state.dependencies[normalize(context.path)] = true
           end
-          local key = preview_key(row, match)
-          state.previews[key] = { offset = 0, total = 1, limit = 1 }
-          rendered[#rendered + 1] = with_separator { { base_preview.text, "Comment" } }
-        else
-          local context = resolve_context(match, buf)
-          if context then
-            if context.path then
-              state.dependencies[normalize(context.path)] = true
-            end
-            local ok, virt_lines = pcall(render_note, context)
-            if ok and virt_lines then
-              local key = preview_key(row, match)
-              local previous = previous_previews[key]
-              local limit = context.range and #virt_lines or MAX_PREVIEW_LINES
-              local max_offset = math.max(0, #virt_lines - limit)
-              local offset = math.min(previous and previous.offset or 0, max_offset)
-              state.previews[key] = { offset = offset, total = #virt_lines, limit = limit }
-              vim.list_extend(rendered, slice(virt_lines, offset, limit))
-            end
+          local ok, virt_lines = pcall(render_note, context)
+          if ok and virt_lines then
+            local key = preview_key(row, match)
+            local previous = previous_previews[key]
+            local limit = context.range and #virt_lines or MAX_PREVIEW_LINES
+            local max_offset = math.max(0, #virt_lines - limit)
+            local offset = math.min(previous and previous.offset or 0, max_offset)
+            state.previews[key] = { offset = offset, total = #virt_lines, limit = limit }
+            vim.list_extend(rendered, slice(virt_lines, offset, limit))
           end
         end
       end

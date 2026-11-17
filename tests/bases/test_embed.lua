@@ -65,13 +65,13 @@ T["resolves linked embeds with a pinned containing-note context"] = function()
   eq(false, first_spec.context_path == second_spec.context_path)
 end
 
-T["discovers a unique shortest-path Base in inline action hints"] = function()
+T["discovers a unique shortest-path Base without an action hint"] = function()
   vim.fn.mkdir(root .. "/Bases", "p")
   eq(0, vim.fn.rename(root .. "/Projects.base", root .. "/Bases/Projects.base"))
   local source = { "![[Projects.base#Active]]" }
   local buf = note_buffer("Folder/Home.md", source)
   embed.attach(buf)
-  eq(true, virt_text(buf):find("Base: Projects.base#Active", 1, true) ~= nil)
+  eq("", virt_text(buf))
   vim.api.nvim_win_set_cursor(0, { 1, 5 })
   local spec, err = base_embed.at_cursor(buf)
   eq(nil, err)
@@ -104,14 +104,12 @@ T["parses fenced base blocks and ignores examples in other fences"] = function()
   eq(nil, base_embed.at_cursor(buf))
 end
 
-T["renders a discoverable linked-Base action without changing Markdown"] = function()
+T["does not render linked-Base action hints or change Markdown"] = function()
   local source = { "![[Projects.base#Active]]", "", "```markdown", "![[Projects.base]]", "```" }
   local buf = note_buffer("Preview.md", source)
   embed.attach(buf)
 
-  local rendered = virt_text(buf)
-  eq(true, rendered:find("Base: Projects.base#Active · :Obsidian bases", 1, true) ~= nil)
-  eq(1, select(2, rendered:gsub(":Obsidian bases", "")))
+  eq("", virt_text(buf))
   eq(source, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
 end
 

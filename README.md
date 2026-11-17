@@ -59,7 +59,7 @@ Vault-wide block candidates are indexed in memory on first use and updated per n
 
 📎 **Embeds:** Render Markdown notes, headings, and blocks inline, with paged whole-note previews. See [Embeds](https://obsidian-nvim.github.io/obsidian.nvim/Embeds).
 
-🗃️ **Bases (experimental):** Open local, native Neovim workspaces for `.base` definitions without launching the Obsidian desktop app. See [Bases](https://obsidian-nvim.github.io/obsidian.nvim/Bases) for the supported vertical slice and required evaluator setup.
+🗃️ **Bases (experimental):** Evaluate `.base` definitions locally in focusable inline panels or native Neovim workspaces without launching the Obsidian desktop app. See [Bases](https://obsidian-nvim.github.io/obsidian.nvim/Bases) for the supported vertical slice and required evaluator setup.
 
 📈 **Status:** See note status in footer like obsidian app.
 

@@ -32,7 +32,7 @@ Then use:
 :Obsidian bases Projects.base#Active
 ```
 
-With the cursor on `![[Projects.base]]`, `![[Projects.base#Active]]`, or inside a fenced `base` block, `:Obsidian bases` opens that definition. Linked Base embeds also display a read-only virtual-line action hint. The Markdown source is not changed.
+With the cursor on `![[Projects.base]]`, `![[Projects.base#Active]]`, or inside a fenced `base` block, `:Obsidian bases` opens that definition. Base embeds do not add a separate action hint to the note.
 
 Automatic inline results and standalone `.base` rendering are opt-in:
 
@@ -53,7 +53,9 @@ require("obsidian").setup {
 }
 ```
 
-When inline rendering is enabled, every eligible linked or fenced Base in an opened vault note evaluates automatically with the containing note pinned as `this.file`. Results appear as extmark virtual lines below the embed or fenced block; they never change buffer text, modified state, or on-disk bytes. Table and list views render natively. Other presentation types use an explicit bounded table fallback inline while remaining available in the full workspace.
+When inline rendering is enabled, every eligible linked or fenced Base in an opened vault note evaluates automatically with the containing note pinned as `this.file`. Each result appears in a focusable scratch-buffer panel anchored below its definition. Blank virtual lines reserve screen space for the panel, so the Markdown buffer text, modified state, and on-disk bytes remain unchanged. Table and list views render natively. Other presentation types use an explicit bounded table fallback inline while remaining available in the full workspace.
+
+Click a panel or reach it with ordinary window navigation such as `<C-w>w`. Its rows are real selectable buffer lines with `cursorline` enabled. On a result row, `<CR>`, `gd`, `grd`, `<C-]>`, and `vim.lsp.buf.definition()` open the represented note or file in the containing note window. Press `q` to return to the note without opening a row.
 
 Use `:Obsidian bases-inline toggle`, `:Obsidian bases-inline refresh`, `:Obsidian bases-inline enable`, or `:Obsidian bases-inline disable` to control the current note. Manual refresh invalidates only the originating vault index before reevaluation. Inline output is bounded by `max_rows`, `max_width`, and `max_diagnostics`.
 
@@ -98,7 +100,7 @@ The implementation is modular under `lua/obsidian/bases/`:
 - `compare.lua` owns the bounded, explicitly confirmed `obsidian base:query ... format=json` comparison, snapshot comparability checks, and path-set diagnostics.
 - `scope.lua` captures each workspace's originating real vault root, config directory, and ignore rules so later workspace switches cannot redirect its query, image, edit, or CLI operations.
 - `embed.lua` and `parse/embeds.lua` resolve linked and fenced definitions with source-aware Markdown exclusions and pinned containing-note context.
-- `inline.lua` reconciles all embedded definitions in a note, renders bounded extmark virtual lines, debounces source and watched-file refreshes, rejects obsolete callbacks, and disposes per-embed queries as definitions disappear.
+- `inline.lua` reconciles embedded definitions, renders bounded focusable scratch-buffer panels over reserved virtual-line space, maps result rows back to source files, debounces refreshes, rejects obsolete callbacks, and disposes panel/query state as definitions disappear.
 - `standalone.lua` handles opt-in current-window rendering for vault `.base` files and the explicit raw-definition escape.
 
 The result identity includes the vault, Base identity and revision, selected view, pinned context path and revision, and evaluator backend/version.
@@ -198,10 +200,10 @@ Focused mini.test coverage in a prepared development checkout includes:
 - Official CLI command construction, JSON path extraction, match/difference summaries, explicit confirmation, saved-revision and overlay comparability checks, stale comparison cleanup, and unavailable/error states.
 - Simulated stable-Neovim capability paths with `vim.ui.img` and `vim.async` absent, guarded `vim.system` setup failures, and cards text fallback.
 - Real `:Obsidian bases` command execution, read-only rendering, note navigation, refresh, and operation without Obsidian desktop.
-- Linked and fenced embedded Bases, named views, multiple automatic inline results, source exclusions, bounded extmark output, stale-callback rejection, cleanup, discoverable actions, and distinct pinned daily-note contexts.
+- Linked and fenced embedded Bases, named views, multiple automatic focusable panels, selectable result rows, definition navigation, source exclusions, bounded output, stale-callback rejection, cleanup, and distinct pinned daily-note contexts.
 - Standalone `.base` automatic workspace entry, raw-definition escape, and outside-vault exclusion.
 
-Actual `NVIM v0.13.0-nightly` terminal UI runs confirmed the workspace layout, arbitrary file rows, dependency-gated backlinks rendered as source paths, grouped lists, Kanban navigation, cards navigation, and immediate result refresh. In the attached Rex terminal, a cards workspace reflowed from three to two columns when its active window narrowed; the selected-card behavior is covered by the same real workspace path in focused tests. The `t` action changed `priority` from text to number in a modified metadata buffer while the on-disk `.obsidian/types.json` remained byte-for-byte unchanged. Earlier runs confirmed explicit single-image and viewport-thumbnail display and cleanup.
+Actual `NVIM v0.13.0-nightly` terminal UI runs confirmed the workspace layout, arbitrary file rows, dependency-gated backlinks rendered as source paths, grouped lists, Kanban navigation, cards navigation, and immediate result refresh. In attached Rex terminals, a cards workspace reflowed from three to two columns when its active window narrowed, and an inline panel reserved space below its embed, accepted `<C-w>w` focus and Visual-line selection, then opened its selected note with `gd`. The selected-card and inline-panel behaviors are covered by the same real code paths in focused tests. The `t` action changed `priority` from text to number in a modified metadata buffer while the on-disk `.obsidian/types.json` remained byte-for-byte unchanged. Earlier runs confirmed explicit single-image and viewport-thumbnail display and cleanup.
 
 Mocked backends cover CLI command construction, comparability, and result handling, but no end-to-end comparison against an installed official `obsidian` CLI is claimed. No separate stable Neovim binary was available, so stable coverage is feature-path simulation rather than execution in a stable binary. Focused regressions cover CRLF index/type-metadata handling, distinct `{}` versus `[]` transport, note-only edits, vault switching, realpath boundaries, request cancellation, and worker timeout recovery.
 
