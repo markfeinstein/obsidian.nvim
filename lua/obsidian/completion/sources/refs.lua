@@ -739,7 +739,8 @@ end
 
 ---@param cc obsidian.completion.sources.refs.Context
 ---@param results obsidian.Note[]
-local function process_search_results(cc, results)
+---@param additional_items lsp.CompletionItem[]|?
+local function process_search_results(cc, results, additional_items)
   if not cc.search then
     return
   end
@@ -782,6 +783,7 @@ local function process_search_results(cc, results)
     end
   end
 
+  local new_text_seen = {}
   for _, option in pairs(cc.new_text_to_option) do
     local option_label = option.display_label or option.label or ""
     local filter_label = option.label or option_label
@@ -797,6 +799,7 @@ local function process_search_results(cc, results)
       error "not implemented"
     end
 
+    new_text_seen[option.new_text] = true
     table.insert(completion_items, {
       documentation = option.documentation,
       sortText = option.sort_text,
@@ -819,10 +822,82 @@ local function process_search_results(cc, results)
     })
   end
 
+  for _, item in ipairs(additional_items or {}) do
+    local new_text = item.textEdit and item.textEdit.newText
+    if not new_text or not new_text_seen[new_text] then
+      if new_text then
+        new_text_seen[new_text] = true
+      end
+      completion_items[#completion_items + 1] = item
+    end
+  end
+
   cc.completion_resolve_callback {
     isIncomplete = true,
     items = completion_items,
   }
+end
+
+---@param cc obsidian.completion.sources.refs.Context
+---@param targets obsidian.cache.UnresolvedTarget[]
+---@return lsp.CompletionItem[]
+local function unresolved_completion_items(cc, targets)
+  local items = {}
+  for _, target in ipairs(targets) do
+    local target_label = vim.fs.basename(target.text):gsub("%.md$", "")
+    if target_label == "" then
+      target_label = target.text
+    end
+
+    local link_path = target.text
+    local path_suffix = target.path:match "(%.[^./]+)$" or ".md"
+    if not vim.endswith(link_path:lower(), path_suffix:lower()) then
+      link_path = link_path .. path_suffix
+    end
+    local format_opts = { path = link_path, label = target_label }
+    local new_text
+    if Obsidian.opts.link.style == "wiki" then
+      new_text = require("obsidian.builtin").wiki_link(format_opts)
+    elseif Obsidian.opts.link.style == "markdown" then
+      new_text = require("obsidian.builtin").markdown_link(format_opts)
+    elseif type(Obsidian.opts.link.style) == "function" then
+      new_text = Obsidian.opts.link.style(format_opts)
+    else
+      error "not implemented"
+    end
+
+    local reference_count = #target.references
+    items[#items + 1] = {
+      label = new_text .. " (unresolved)",
+      sortText = target_label,
+      filterText = completion.get_filter_text(target.text .. " " .. target_label),
+      documentation = {
+        kind = "markdown",
+        value = string.format(
+          "`%s`\n\nUnresolved note target referenced %d %s.\n\nExpected path: `%s`",
+          new_text,
+          reference_count,
+          reference_count == 1 and "time" or "times",
+          target.path
+        ),
+      },
+      kind = vim.lsp.protocol.CompletionItemKind.Reference,
+      textEdit = {
+        newText = new_text,
+        range = {
+          start = {
+            line = cc.request.line,
+            character = cc.insert_start,
+          },
+          ["end"] = {
+            line = cc.request.line,
+            character = cc.insert_end,
+          },
+        },
+      },
+    }
+  end
+  return items
 end
 
 ---Use cached metadata to return the complete ordinary note-reference candidate set.
@@ -858,7 +933,8 @@ local function process_cached_search(cc)
     notes[#notes + 1] = Note.from_cache(path, rows[path])
   end
 
-  process_search_results(cc, include_loaded_notes(notes, dir, {}, true))
+  local unresolved = cache.find_unresolved_targets { dir = dir }
+  process_search_results(cc, include_loaded_notes(notes, dir, {}, true), unresolved_completion_items(cc, unresolved))
   return true
 end
 

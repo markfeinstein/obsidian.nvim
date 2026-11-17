@@ -354,6 +354,83 @@ Cached note content
   )
 end
 
+T["completion"]["cached note references include unresolved targets"] = function()
+  h.mock_vault_contents(child.Obsidian.dir, {
+    ["source.md"] = "Start typing",
+    ["references-a.md"] = "[[GCP]]\n[[GCP|cloud platform]]\n![[Missing.pdf]]",
+    ["references-b.md"] = "Another [[GCP]] reference",
+  })
+
+  child.lua [[require("obsidian.cache").setup { enabled = true, backend = "memory" }]]
+  h.child_wait(child, [[return require("obsidian.cache").is_ready()]], { desc = "cache ready" })
+  child.cmd("edit " .. tostring(child.Obsidian.dir / "source.md"))
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { "[[GC" })
+  child.api.nvim_win_set_cursor(0, { 1, 4 })
+
+  local result = run_completion(0, 4)
+  local unresolved
+  for _, candidate in ipairs(result.items or {}) do
+    if candidate.textEdit and candidate.textEdit.newText == "[[GCP]]" then
+      unresolved = candidate
+      break
+    end
+  end
+
+  assert(unresolved, "cached unresolved target was missing")
+  eq("[[GCP]] (unresolved)", unresolved.label)
+  eq(nil, unresolved.command)
+  assert(unresolved.documentation.value:find("referenced 3 times", 1, true))
+  assert(not vim.iter(result.items or {}):any(function(candidate)
+    return candidate.textEdit and candidate.textEdit.newText:find("Missing.pdf", 1, true)
+  end), "missing attachment was offered as a note reference")
+
+  accept_completion(unresolved)
+  eq("[[GCP]]", child.api.nvim_get_current_line())
+
+  local target_path = tostring(child.Obsidian.dir / "GCP.md")
+  child.fn.writefile({ "# GCP" }, target_path)
+  child.lua([[require("obsidian.cache").notes.refresh(...)]], { target_path })
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { "[[GC" })
+  child.api.nvim_win_set_cursor(0, { 1, 4 })
+  result = run_completion(0, 4)
+
+  assert(
+    vim.iter(result.items or {}):any(function(candidate)
+      return candidate.label == "[[GCP]]"
+    end),
+    "created note was missing from cached completion"
+  )
+  assert(not vim.iter(result.items or {}):any(function(candidate)
+    return candidate.label == "[[GCP]] (unresolved)"
+  end), "resolved target remained in unresolved completion cache")
+end
+
+T["completion"]["cached unresolved targets honor markdown link style"] = function()
+  h.mock_vault_contents(child.Obsidian.dir, {
+    ["source.md"] = "Start typing",
+    ["references.md"] = "[[GCP]]",
+  })
+
+  child.lua [[
+    Obsidian.opts.link.style = "markdown"
+    require("obsidian.cache").setup { enabled = true, backend = "memory" }
+  ]]
+  h.child_wait(child, [[return require("obsidian.cache").is_ready()]], { desc = "cache ready" })
+  child.cmd("edit " .. tostring(child.Obsidian.dir / "source.md"))
+  child.api.nvim_buf_set_lines(0, 0, -1, false, { "[[GC" })
+  child.api.nvim_win_set_cursor(0, { 1, 4 })
+
+  local result = run_completion(0, 4)
+  assert(
+    vim.iter(result.items or {}):any(function(candidate)
+      return candidate.label == "[GCP](GCP.md) (unresolved)"
+        and candidate.textEdit
+        and candidate.textEdit.newText == "[GCP](GCP.md)"
+    end),
+    "markdown unresolved target was missing"
+  )
+end
+
 T["completion"]["cached note references use unsaved loaded metadata"] = function()
   h.mock_vault_contents(child.Obsidian.dir, {
     ["source.md"] = "[[ua",

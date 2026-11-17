@@ -10,7 +10,9 @@ local filetypes = require "obsidian.filetypes"
 local ignore = require "obsidian.ignore"
 
 local M = {}
-M.find_files = require("obsidian.cache.api").find_files
+local cache_api = require "obsidian.cache.api"
+M.find_files = cache_api.find_files
+M.find_unresolved_targets = cache_api.find_unresolved_targets
 
 ---@class obsidian.cache.Backend
 ---@field open fun(opts: table): obsidian.cache.Store
@@ -444,6 +446,7 @@ function M.setup(opts)
 end
 
 function M.shutdown()
+  cache_api.invalidate_unresolved_targets()
   if not state then
     return
   end
